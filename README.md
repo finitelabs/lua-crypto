@@ -55,8 +55,12 @@ pure-Lua implementations** regardless of this flag, because the shipped
 Download a pre-built single-file module from the
 [Releases](https://github.com/finitelabs/lua-crypto/releases) page:
 
-- **`crypto.lua`** — complete bundle with all dependencies included (zero
-  external dependencies)
+- **`crypto.lua`** — the canonical **core** build. Requires `bitn`
+  ([lua-bitn](https://github.com/finitelabs/lua-bitn)) on the Lua path. Use this
+  when composing with other libraries that already provide `bitn`, so the shared
+  dependency is vendored only once.
+- **`crypto-portable.lua`** — **portable** build with every dependency bundled
+  in (zero external dependencies). Use this when you want a single drop-in file.
 
 ### Option 2: From Source
 
@@ -87,11 +91,11 @@ local tag = crypto.sha256.hmac_sha256_hex(key, message)
 local sealed = crypto.chacha20_poly1305.encrypt(key, nonce, plaintext, aad)
 local opened = crypto.chacha20_poly1305.decrypt(key, nonce, sealed, aad)
 
--- Diffie-Hellman (X25519)
-local alice = crypto.x25519.generate_keypair()
-local bob = crypto.x25519.generate_keypair()
-local shared_a = crypto.x25519.diffie_hellman(alice.private_key, bob.public_key)
-local shared_b = crypto.x25519.diffie_hellman(bob.private_key, alice.public_key)
+-- Diffie-Hellman (X25519); generate_keypair() returns private, public
+local alice_priv, alice_pub = crypto.x25519.generate_keypair()
+local bob_priv, bob_pub = crypto.x25519.generate_keypair()
+local shared_a = crypto.x25519.diffie_hellman(alice_priv, bob_pub)
+local shared_b = crypto.x25519.diffie_hellman(bob_priv, alice_pub)
 assert(shared_a == shared_b)
 ```
 

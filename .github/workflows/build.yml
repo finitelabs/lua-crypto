@@ -1,0 +1,122 @@
+name: Lua Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    name: Check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: '5.4'
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
+        with:
+          luarocksVersion: "3.12.2"
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      - name: Install stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v2.1.0
+          args: false # Will be run as part of `make check`
+
+      - name: Check
+        run: make check
+
+  test:
+    needs: check
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    strategy:
+      fail-fast: true
+      matrix:
+        lua-version: ['5.1', '5.2', '5.3', '5.4', 'luajit-2.0', 'luajit-2.1']
+
+    name: Lua ${{ matrix.lua-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: ${{ matrix.lua-version }}
+
+      - name: Setup tests
+        run: |
+          # Set the correct binary name based on the Lua version
+          if [[ "${{ matrix.lua-version }}" == luajit* ]]; then
+            LUA_BINARY=luajit
+          else
+            LUA_BINARY=lua
+          fi
+
+          echo "LUA_BINARY=$LUA_BINARY" >> "$GITHUB_ENV"
+          ${LUA_BINARY} -v
+
+      - name: Run tests
+        run: |
+          make test-all
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Build Combined Module
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: '5.4'
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
+        with:
+          luarocksVersion: "3.12.2"
+
+      - name: Install amalg
+        run: luarocks install amalg
+
+      - name: Build combined module
+        run: make build
+
+      - name: Verify build
+        run: |
+          # Check default build
+          if [ -f "build/crypto.lua" ]; then
+            echo "✅ build/crypto.lua exists ($(wc -c < "build/crypto.lua") bytes)"
+            # Quick sanity check - make sure it contains expected content
+            if grep -q "crypto" build/crypto.lua; then
+              echo "✅ Build contains expected content"
+            else
+              echo "❌ Build seems corrupted"
+              exit 1
+            fi
+          else
+            echo "❌ build/crypto.lua missing"
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto.lua
+          path: build/crypto.lua
+          retention-days: 30

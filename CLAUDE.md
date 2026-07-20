@@ -90,13 +90,19 @@ make test-matrix            # across Lua 5.1–5.4 + LuaJIT
 
 ## Building
 
-`amalg` produces a single-file distribution from `src/crypto/init.lua`:
+`amalg` produces two single-file distributions from `src/crypto/init.lua`:
 
 ```bash
-make build          # Output: build/crypto.lua (bitn bundled in)
+make build          # Output: build/crypto.lua          (core; bitn excluded via `-i bitn`)
+                    #         build/crypto-portable.lua  (all dependencies bundled)
 ```
 
-Version is automatically injected from git tags during release.
+`crypto.lua` is the **canonical core build**: it excludes `bitn` and expects it
+on the Lua path, so it composes with other libraries that share `bitn` without
+duplicating it (e.g. lua-noiseprotocol vendors this as `vendor/crypto.lua`
+alongside its own `vendor/bitn.lua`). `crypto-portable.lua` bundles every
+dependency for a single drop-in file with zero external requires. Version is
+injected from git tags during release.
 
 ## CI/CD
 

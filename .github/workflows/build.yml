@@ -113,6 +113,13 @@ jobs:
             echo "❌ build/crypto.lua missing"
             exit 1
           fi
+          # Check portable build (all dependencies bundled)
+          if [ -f "build/crypto-portable.lua" ]; then
+            echo "✅ build/crypto-portable.lua exists ($(wc -c < "build/crypto-portable.lua") bytes)"
+          else
+            echo "❌ build/crypto-portable.lua missing"
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

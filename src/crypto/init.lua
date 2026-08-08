@@ -5,6 +5,9 @@
 --- Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a. Runs on Lua
 --- 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
 ---
+--- Key generation draws from `crypto.random`, which uses the host CSPRNG and
+--- raises when there is not one. It never falls back to `math.random`.
+---
 --- When the host provides the lua-openssl binding (e.g. Control4 DriverWorks OS
 --- >= 3.4.1), hashing and AEAD transparently prefer it for speed and fall back to
 --- the pure-Lua implementations otherwise. The elliptic-curve Diffie-Hellman
@@ -51,6 +54,10 @@ local crypto = {
   -- Key derivation
   --- @type crypto.hkdf
   hkdf = require("crypto.hkdf"),
+
+  -- Cryptographically secure randomness (raises rather than returning weak bytes)
+  --- @type crypto.random
+  random = require("crypto.random"),
 
   -- Arbitrary-precision integers (OpenSSL-preferred modular exponentiation)
   --- @type crypto.bignum
@@ -107,6 +114,7 @@ function crypto.selftest()
     "poly1305",
     "aes_gcm",
     "hkdf",
+    "random",
     "bignum",
     "srp",
     "x25519",

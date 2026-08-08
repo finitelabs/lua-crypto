@@ -10,8 +10,8 @@
 #   ./run_tests.sh sha256 x25519      # Run only sha256 and x25519
 #
 # Available modules: sha256, sha512, blake2, chacha20, chacha20_poly1305,
-#                    poly1305, aes_gcm, hkdf, bignum, srp, x25519, x448, ed25519,
-#                    openssl_wrapper
+#                    poly1305, aes_gcm, hkdf, random, bignum, srp, x25519, x448,
+#                    ed25519, openssl_wrapper
 
 set -e  # Exit on any error
 
@@ -49,7 +49,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
-all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "hkdf" "bignum" "srp" "x25519" "x448" "ed25519" "openssl_wrapper")
+all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "hkdf" "random" "bignum" "srp" "x25519" "x448" "ed25519" "openssl_wrapper")
 default_modules=("${all_modules[@]}")
 modules_to_run=("$@")
 
@@ -139,6 +139,7 @@ run_selftest "ChaCha20-Poly1305"  "chacha20_poly1305" "crypto.chacha20_poly1305"
 run_selftest "Poly1305"           "poly1305"          "crypto.poly1305"
 run_selftest "AES-GCM"            "aes_gcm"           "crypto.aes_gcm"
 run_selftest "HKDF"               "hkdf"              "crypto.hkdf"
+run_selftest "Randomness"         "random"            "crypto.random"
 run_selftest "Bignum"             "bignum"            "crypto.bignum"
 run_selftest "SRP-6a"             "srp"               "crypto.srp"
 run_selftest "X25519"             "x25519"            "crypto.x25519"

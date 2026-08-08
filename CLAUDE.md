@@ -17,6 +17,7 @@ lua-crypto/
 │   ├── x448.lua              # Curve448 Diffie-Hellman (always pure Lua)
 │   ├── ed25519.lua           # Ed25519 signatures, RFC 8032 (always pure Lua)
 │   ├── hkdf.lua              # HKDF-Extract/Expand, RFC 5869 (SHA-256/512)
+│   ├── random.lua            # CSPRNG bytes; raises rather than returning weak ones
 │   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
@@ -104,6 +105,7 @@ OpenSSL 3.1.4), pinned as regression cases in `openssl_wrapper.selftest()`:
 | `BN` | yes | Modular exponentiation is spelled `powmod`, not `mod_exp`. |
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
+| `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |
 
 ### Why bignum must use OpenSSL on Control4
 
@@ -128,8 +130,44 @@ controller stopped servicing other drivers' Lua too.
 So on Control4 the pure-Lua path is a **correctness reference and a portability
 fallback, not a shippable code path**. `Feature.BN` resolving true is effectively
 a precondition for HAP pairing on this hardware. Anything built on `crypto.srp`
-should check `crypto.openssl_wrapper.features().BN` and fail loudly rather than
+should check **`crypto.srp.is_accelerated()`** and fail loudly rather than
 silently falling back to something that will hang the controller.
+
+That accessor delegates to `bignum.is_accelerated()`, which applies both of the
+conditions `mod_exp` applies: the feature gate *and* the multi-limb known-answer
+check on the binding. Reading `openssl_wrapper.features().BN` directly is the
+wrong precondition twice over -- it reports true for a binding `bignum` has
+already decided not to trust, and it makes a HAP caller reach through another
+module's internals for a property `crypto.srp` owns.
+
+### Randomness is a capability, not an optimisation
+
+`crypto.random` returns cryptographically secure bytes or raises. There is no
+weak fallback anywhere in the library: `math.random` is C `rand()` on 5.1 and
+LuaJIT, and on 5.4+ seeding it from the clock actively downgrades a generator the
+runtime had already seeded well, so the old
+`math.randomseed(os.time() + os.clock() * 1000000)` idiom was worse than making
+no call at all. At driver startup it was worth roughly 20 bits.
+
+Sources in order: `openssl.random(n, true)` behind `Feature.RANDOM`, then
+`/dev/urandom`, then failure. Both are live on a Control4 controller -- the
+0.8.5 binding's RNG works, and `/dev/urandom` is readable from inside the driver
+sandbox (measured 2026-08-08).
+
+Two design points worth not re-litigating:
+
+- It resolves through `openssl_wrapper.get_ungated`, not `get`. Everywhere else
+  the acceleration flag picks between two *correct* implementations; here it
+  would pick between a correct one and a broken one, so the flag does not gate
+  it.
+- The probe verifies rather than assumes: `rand_status()` must be true and two
+  full-width draws must differ. A binding whose RNG is stubbed out or wired to a
+  constant passes a version check and a length check but not that one.
+
+Callers holding their own entropy are unaffected -- `ed25519.sign(seed, ...)`,
+`x25519.diffie_hellman(priv, ...)` and `session:set_private(a)` all take key
+material directly. Hosts with neither source can install one with
+`random.set_source(fn)`.
 
 ### bitn dependency
 

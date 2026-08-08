@@ -1013,6 +1013,23 @@ function bignum.mod_exp(base, exp, m)
   return mod_exp_reference(base, exp, m)
 end
 
+--- Whether `mod_exp` will use the OpenSSL backend.
+---
+--- Answers the question callers actually have -- "will a 3072-bit exponentiation
+--- finish in milliseconds or in minutes?" -- so it applies the same two
+--- conditions `mod_exp` does: acceleration enabled with a binding that passes
+--- `Feature.BN`, *and* a binding that reproduces the multi-limb known-answer
+--- vector. Checking the feature gate alone would report true for a binding this
+--- module has already decided not to trust.
+---
+--- The verdict is not static: it changes with `crypto.use_openssl()`.
+---
+--- @return boolean accelerated True if OpenSSL will handle modular exponentiation
+function bignum.is_accelerated()
+  local openssl = openssl_wrapper.get(openssl_wrapper.Feature.BN)
+  return openssl ~= nil and accelerator_ready(openssl)
+end
+
 -- ============================================================================
 -- TEST VECTORS AND VALIDATION
 -- ============================================================================

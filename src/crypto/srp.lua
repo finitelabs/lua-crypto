@@ -45,6 +45,7 @@
 local srp = {}
 
 local bignum = require("crypto.bignum")
+local random = require("crypto.random")
 local sha256 = require("crypto.sha256")
 local sha512 = require("crypto.sha512")
 
@@ -53,7 +54,6 @@ local bytes = utils.bytes
 local benchmark_op = utils.benchmark.benchmark_op
 
 -- Local references for performance
-local floor = math.floor
 local string_char = string.char
 local string_rep = string.rep
 local table_concat = table.concat
@@ -198,27 +198,6 @@ local function resolve_hash(spec)
   return entry
 end
 
---- Counter mixed into the seed so two generations in the same clock tick differ.
-local key_counter = 0
-
---- Generate random bytes for the client private exponent.
----
---- Same seeding strategy as `crypto.x25519.generate_private_key`. The seed is
---- floored before use because Lua 5.4's `math.randomseed` rejects a float with a
---- fractional part.
----
---- @param n integer Number of bytes
---- @return string bytes Random byte string
-local function random_bytes(n)
-  key_counter = key_counter + 1
-  math.randomseed(floor(os.time() + os.clock() * 1000000) + key_counter)
-  local out = {}
-  for i = 1, n do
-    out[i] = string_char(math.random(0, 255))
-  end
-  return table_concat(out)
-end
-
 -- ============================================================================
 -- SESSION
 -- ============================================================================
@@ -265,7 +244,10 @@ end
 function Session:get_public()
   if not self.A_bytes then
     if not self.a then
-      self:set_private(random_bytes(PRIVATE_BYTES))
+      -- `crypto.random` raises when the host has no CSPRNG rather than handing
+      -- back a guessable `a`: recovering `a` recovers `S`, therefore `K`,
+      -- therefore the session, and permits an offline attack on the setup code.
+      self:set_private(random.bytes(PRIVATE_BYTES))
     end
     local params = self.params
     local A = bignum.mod_exp(params.g, self.a, params.N)
@@ -400,6 +382,29 @@ function srp.new(opts)
     username = opts.username,
     password = opts.password,
   }, Session)
+end
+
+--- Whether an exchange will run at usable speed on this host.
+---
+--- SRP-6a's cost is dominated by modular exponentiation over the group modulus,
+--- and for the 3072-bit HAP group the gap between backends is not a matter of
+--- taste. Measured on a Control4 controller (2026-08-07): `bn.powmod` takes
+--- 5.08 ms, while the pure-Lua path extrapolates to roughly 176 s for the
+--- 256-bit client exponent -- a factor of about 34,000. Worse, Lua execution is
+--- effectively serialised across drivers there, so an unaccelerated exchange
+--- does not merely run slowly, it blocks the controller until the watchdog
+--- resets the driver.
+---
+--- This is deliberately advisory. `crypto.bignum` stays portable and will
+--- compute the same answer either way, because the pure path is what makes the
+--- test suite runnable everywhere. But a HAP driver should check this before
+--- starting Pair-Setup rather than discovering it by hanging, and it should not
+--- have to reach through `openssl_wrapper.features()` into another module's
+--- internals to do so.
+---
+--- @return boolean accelerated True if modular exponentiation uses OpenSSL
+function srp.is_accelerated()
+  return bignum.is_accelerated()
 end
 
 -- ============================================================================

@@ -13,6 +13,7 @@
 local x448 = {}
 
 local bitn = require("bitn")
+local random = require("crypto.random")
 local utils = require("crypto.utils")
 
 local bytes = utils.bytes
@@ -438,20 +439,12 @@ local function x448_scalarmult(scalar, base)
 end
 
 --- Generate a random Curve448 private key
+---
+--- Drawn from `crypto.random`, which raises rather than falling back to a weak
+--- generator when the host has no CSPRNG.
 --- @return string private_key 56-byte private key
 function x448.generate_private_key()
-  -- Generate 56 random bytes
-  local key = ""
-
-  -- Mix multiple sources of randomness
-  local seed = os.time() + (os.clock() * 1000000)
-  math.randomseed(seed)
-
-  for _ = 1, 56 do
-    key = key .. char(math.random(0, 255))
-  end
-
-  return key
+  return random.bytes(56)
 end
 
 --- Derive public key from private key

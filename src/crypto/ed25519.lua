@@ -14,6 +14,7 @@ local ed25519 = {}
 
 local bit32 = require("bitn").bit32
 
+local random = require("crypto.random")
 local sha512_mod = require("crypto.sha512")
 local utils = require("crypto.utils")
 local bytes = utils.bytes
@@ -762,20 +763,13 @@ end
 
 --- Generate a random Ed25519 private key (seed)
 ---
---- Uses the same time/clock/counter seeding strategy as `crypto.x25519`; for
---- production keys prefer supplying a seed from a system CSPRNG.
+--- The seed is drawn from `crypto.random`, which raises rather than falling back
+--- to a weak generator when the host has no CSPRNG. For Ed25519 that matters
+--- more than for an ephemeral key: this seed is a long-term signing identity, so
+--- a guessable one lets an attacker impersonate this device indefinitely.
 --- @return string seed 32-byte private key seed
 function ed25519.generate_private_key()
-  -- Better randomness by using time + clock + counter
-  local counter = ed25519._key_counter or 0
-  ed25519._key_counter = counter + 1
-  math.randomseed(os.time() + os.clock() * 1000000 + counter)
-
-  local key_bytes = {}
-  for i = 1, 32 do
-    key_bytes[i] = string_char(math.random(0, 255))
-  end
-  return table_concat(key_bytes)
+  return random.bytes(32)
 end
 
 --- Expand a 32-byte seed into the 64-byte signing key material

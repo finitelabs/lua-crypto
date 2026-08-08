@@ -39,6 +39,10 @@ local OpenSSLFeature = {
   --- Raw Octet Key Pair support: creating and *signing* with Ed25519/X25519 keys.
   --- Importing such a key is not sufficient; the probe requires a working signature.
   OKP = "OKP",
+  --- Cryptographically secure random bytes (`openssl.random`), used by `crypto.random`.
+  --- Unlike every other feature here this one has no pure-Lua fallback, so it is
+  --- resolved through `get_ungated` rather than `get`.
+  RANDOM = "RANDOM",
 }
 
 --- Feature requirement definitions
@@ -110,6 +114,36 @@ local FeatureRequirements = {
         return key:verify("probe", signature) == true
       end)
       return ok and verified == true
+    end,
+  },
+  [OpenSSLFeature.RANDOM] = {
+    min_version = "0.8.0",
+    probe = function(openssl)
+      if type(openssl.random) ~= "function" then
+        return false
+      end
+      -- `rand_status` reports whether the PRNG has been seeded with enough
+      -- entropy. A binding that cannot answer the question is treated as
+      -- unseeded rather than assumed good -- for entropy the safe default is
+      -- "no", because the fallback is a different source, not a slower one.
+      if type(openssl.rand_status) ~= "function" then
+        return false
+      end
+      local status_ok, seeded = pcall(openssl.rand_status)
+      if not status_ok or seeded ~= true then
+        return false
+      end
+      -- Verify the `strong` flag actually yields the requested width twice, and
+      -- that the two draws differ: a build whose RNG is stubbed out or wired to
+      -- a constant passes a length check but fails this one. Two equal draws
+      -- from a working CSPRNG has probability 2^-256, so the false negative is
+      -- not a real risk. Note this consumes entropy, unlike the other probes.
+      local first_ok, first = pcall(openssl.random, 32, true)
+      if not first_ok or type(first) ~= "string" or #first ~= 32 then
+        return false
+      end
+      local second_ok, second = pcall(openssl.random, 32, true)
+      return second_ok and type(second) == "string" and #second == 32 and first ~= second
     end,
   },
 }
@@ -194,6 +228,39 @@ local function resolve_feature(openssl, feature)
   return true
 end
 
+--- Load the binding, caching both the module and a failed attempt.
+--- @return table|nil openssl
+local function load_binding()
+  if _openssl_unavailable then
+    return nil
+  end
+  if _openssl_module == nil then
+    local ok, openssl_module = pcall(require, "openssl")
+    if not ok or openssl_module == nil then
+      -- Graceful fallback: acceleration was requested but the binding is absent.
+      _openssl_unavailable = true
+      return nil
+    end
+    --- @cast openssl_module table
+    _openssl_module = openssl_module
+    _openssl_module_features = {}
+  end
+  return _openssl_module
+end
+
+--- Resolve a feature against the loaded binding, caching the verdict.
+--- @param openssl table
+--- @param feature OpenSSLFeature
+--- @return boolean supported
+local function supports(openssl, feature)
+  local supported = _openssl_module_features[feature]
+  if supported == nil then
+    supported = resolve_feature(openssl, feature)
+    _openssl_module_features[feature] = supported
+  end
+  return supported
+end
+
 --- Get the OpenSSL module if enabled and supports required features
 ---
 --- Checks if OpenSSL is enabled and supports all specified features before
@@ -205,31 +272,39 @@ end
 function openssl_wrapper.get(...)
   local required_features = { ... }
 
-  if not _use_openssl or _openssl_unavailable then
+  if not _use_openssl then
     return nil
-  elseif _openssl_module == nil then
-    local ok, openssl_module = pcall(require, "openssl")
-    if not ok or openssl_module == nil then
-      -- Graceful fallback: acceleration was requested but the binding is absent.
-      _openssl_unavailable = true
-      return nil
-    end
-    --- @cast openssl_module table
-    _openssl_module = openssl_module
-    _openssl_module_features = {}
+  end
+  local openssl = load_binding()
+  if openssl == nil then
+    return nil
   end
   -- Check all requested features, resolving (and caching) each on first request.
   for _, required_feature in ipairs(required_features) do
-    local supported = _openssl_module_features[required_feature]
-    if supported == nil then
-      supported = resolve_feature(_openssl_module, required_feature)
-      _openssl_module_features[required_feature] = supported
-    end
-    if not supported then
+    if not supports(openssl, required_feature) then
       return nil
     end
   end
-  return _openssl_module
+  return openssl
+end
+
+--- Get the OpenSSL module for a capability that is *not* an acceleration.
+---
+--- `get` deliberately honours the opt-in acceleration flag, because every
+--- feature behind it has a correct pure-Lua fallback and the flag only chooses
+--- which correct implementation runs. `Feature.RANDOM` is different in kind:
+--- there is no portable pure-Lua substitute for a CSPRNG, so gating it on a
+--- performance switch would silently trade entropy for nothing. Callers that
+--- need a capability rather than a speed-up use this instead.
+---
+--- @param feature OpenSSLFeature Feature the binding must support
+--- @return table|nil openssl The module if available and supporting the feature; nil otherwise
+function openssl_wrapper.get_ungated(feature)
+  local openssl = load_binding()
+  if openssl == nil then
+    return nil
+  end
+  return supports(openssl, feature) and openssl or nil
 end
 
 --- Report which features the currently loaded binding supports.
@@ -501,6 +576,71 @@ function openssl_wrapper.selftest()
         install(stub_openssl("0.9.2", { bn = working_bn("powmod") }))
         return openssl_wrapper.get(OpenSSLFeature.AAD, OpenSSLFeature.BN) ~= nil
           and openssl_wrapper.get(OpenSSLFeature.AAD, OpenSSLFeature.KDF) == nil
+      end,
+    },
+    {
+      name = "get honours the acceleration flag, get_ungated does not",
+      test = function()
+        install(stub_openssl("0.9.2", { bn = working_bn("powmod") }))
+        openssl_wrapper.use(false)
+        -- The flag chooses between two correct implementations, so it must
+        -- suppress `get`. It must not be able to suppress a capability that has
+        -- no fallback, which is the whole reason `get_ungated` exists.
+        return openssl_wrapper.get(OpenSSLFeature.BN) == nil and openssl_wrapper.get_ungated(OpenSSLFeature.BN) ~= nil
+      end,
+    },
+    {
+      name = "get_ungated still enforces the probe",
+      test = function()
+        install(stub_openssl("0.9.2"))
+        openssl_wrapper.use(false)
+        -- Ungated means "ignore the flag", not "skip the check".
+        return openssl_wrapper.get_ungated(OpenSSLFeature.BN) == nil
+      end,
+    },
+    {
+      name = "RANDOM probe requires rand_status, a full width, and two distinct draws",
+      test = function()
+        --- @param overrides table Fields replacing the working RNG stub
+        local function rng(overrides)
+          local draws = 0
+          local stub = {
+            rand_status = function()
+              return true
+            end,
+            random = function(n)
+              draws = draws + 1
+              return string.rep(string.char(draws % 256), n)
+            end,
+          }
+          for key, value in pairs(overrides) do
+            stub[key] = value
+          end
+          install(stub_openssl("0.8.5", stub))
+          return openssl_wrapper.get_ungated(OpenSSLFeature.RANDOM) ~= nil
+        end
+
+        return rng({}) == true
+          -- Missing rand_status: unverifiable seeding is treated as unseeded.
+          and rng({ rand_status = false }) == false
+          and rng({
+            rand_status = function()
+              return false
+            end,
+          }) == false
+          -- A constant RNG passes a length check but not a distinctness one.
+          and rng({
+            random = function(n)
+              return string.rep("\0", n)
+            end,
+          }) == false
+          -- A short read must not count as support.
+          and rng({
+            random = function(n)
+              return string.rep("\0", n - 1)
+            end,
+          }) == false
+          and rng({ random = false }) == false
       end,
     },
     {

@@ -184,7 +184,7 @@ typecheck:
 	fi
 
 .PHONY: check
-check: format-check lint
+check: format-check lint typecheck
 	@echo "Code quality checks complete."
 
 # Clean generated files

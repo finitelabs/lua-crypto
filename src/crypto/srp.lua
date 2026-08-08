@@ -137,12 +137,15 @@ local function resolve_group(group)
   local N = bignum.from_hex(group.N)
   assert(not bignum.is_zero(N), "SRP: group modulus N must be non-zero")
 
+  -- Read into a local because narrowing applies to locals, not table fields:
+  -- `type(group.g)` does not tell the checker anything about `group.g`.
+  local g_spec = group.g
   local g
-  if type(group.g) == "number" then
-    g = bignum.from_number(group.g)
+  if type(g_spec) == "number" then
+    g = bignum.from_number(g_spec)
   else
-    assert(type(group.g) == "string", "SRP: group.g must be a number or a hex string")
-    g = bignum.from_hex(group.g)
+    assert(type(g_spec) == "string", "SRP: group.g must be a number or a hex string")
+    g = bignum.from_hex(g_spec)
   end
   assert(not bignum.is_zero(g), "SRP: group generator g must be non-zero")
 
@@ -790,6 +793,7 @@ function srp.selftest()
   end)
 
   check("verify rejects a non-string M2", function()
+    --- @diagnostic disable-next-line: param-type-mismatch -- the wrong type is the test
     return reference_session:verify(nil) == false
   end)
 

@@ -1,9 +1,44 @@
 {
-  "runtime": { "version": "LuaJIT" },
+  "runtime": {
+    "version": "LuaJIT",
+    "special": {},
+    "plugin": "",
+    "pluginArgs": []
+  },
   "workspace": {
     "useGitIgnore": false,
-    "library": ["vendor"],
-    "ignoreDir": [".claude", ".git", ".idea", ".venv", "build", "dist", "node_modules", "vendor"]
+    "library": [
+      "vendor"
+    ],
+    "ignoreDir": [
+      ".claude",
+      ".git",
+      ".idea",
+      ".install",
+      ".lua",
+      ".luarocks",
+      ".venv",
+      "build",
+      "dist",
+      "node_modules",
+      "vendor"
+    ],
+    "maxPreload": 5000,
+    "preloadFileSize": 500
   },
-  "diagnostics": { "disable": ["unnecessary-assert"] }
+  "diagnostics": {
+    "enable": true,
+    "disable": [
+      "unnecessary-assert"
+    ],
+    "severity": {},
+    "globals": [],
+    "globalsRegex": [],
+    "neededFileStatus": {},
+    "groupFileStatus": {},
+    "groupSeverity": {},
+    "enableScheme": [
+      "file"
+    ]
+  }
 }

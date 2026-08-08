@@ -167,11 +167,17 @@ lint:
 # Deliberately NOT part of `check`: a handful of type-narrowing and
 # deliberate-bad-argument diagnostics remain, and turning CI red on those is a
 # separate decision from making the check runnable.
+#
+# Checks the whole repo, not just src/: an editor's workspace is the repo, and
+# @alias resolves workspace-wide, so a narrower scope gives different findings
+# rather than fewer. --configpath pins the config, because .luarc.json is
+# personal editor preference and the count moves with it.
 .PHONY: typecheck
 typecheck:
 	@if command -v lua-language-server >/dev/null 2>&1; then \
-		echo "Running lua-language-server..."; \
-		lua-language-server --check "$(CURDIR)/src" --checklevel=Warning --logpath="$(CURDIR)/build/luals"; \
+		echo "Running lua-language-server $$(lua-language-server --version)..."; \
+		lua-language-server --check "$(CURDIR)" --checklevel=Warning \
+			--configpath="$(CURDIR)/.luarc-typecheck.json" --logpath="$(CURDIR)/build/luals"; \
 	else \
 		echo "lua-language-server not found. Install with: make install-deps"; \
 		exit 1; \

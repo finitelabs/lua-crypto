@@ -28,9 +28,7 @@
   },
   "diagnostics": {
     "enable": true,
-    "disable": [
-      "unnecessary-assert"
-    ],
+    "disable": [],
     "severity": {},
     "globals": [],
     "globalsRegex": [],

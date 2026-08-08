@@ -309,7 +309,7 @@ local RCON = {
 --- Initialize a 4-element AES word with zeros
 --- @return AESWord word Initialized word
 local function create_aes_word()
-  --- @type AESState
+  --- @type AESWord
   return { 0, 0, 0, 0 }
 end
 

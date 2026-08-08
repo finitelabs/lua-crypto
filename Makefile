@@ -164,9 +164,10 @@ lint:
 # luacheck -- duplicate or undefined `@alias`, return counts that disagree with
 # `@return`, fields missing from a `@class` -- so it is a separate target.
 #
-# Deliberately NOT part of `check`: a handful of type-narrowing and
-# deliberate-bad-argument diagnostics remain, and turning CI red on those is a
-# separate decision from making the check runnable.
+# Part of `check`, so CI enforces it. The type-narrowing and
+# deliberate-bad-argument findings that held it out are resolved: the narrowing
+# ones were real defects, and the bad-argument ones are negative tests carrying
+# a scoped `@diagnostic` bypass.
 #
 # Checks the whole repo, not just src/: an editor's workspace is the repo, and
 # @alias resolves workspace-wide, so a narrower scope gives different findings
@@ -184,7 +185,7 @@ typecheck:
 	fi
 
 .PHONY: check
-check: format-check lint
+check: format-check lint typecheck
 	@echo "Code quality checks complete."
 
 # Clean generated files

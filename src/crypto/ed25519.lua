@@ -1203,9 +1203,11 @@ function ed25519.selftest()
         name = "verify returns false for non-string arguments",
         test = function()
           local v = test_vectors[3]
+          --- @diagnostic disable: param-type-mismatch -- the wrong types are the test
           assert(ed25519.verify(nil, v.message, v.signature) == false, "nil public key must be rejected")
           assert(ed25519.verify(v.public_key, nil, v.signature) == false, "nil message must be rejected")
           assert(ed25519.verify(v.public_key, v.message, 42) == false, "non-string signature must be rejected")
+          --- @diagnostic enable: param-type-mismatch
         end,
       },
     }

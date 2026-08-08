@@ -29,6 +29,10 @@ portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
 | MAC | Poly1305 | `crypto.poly1305` |
 | Diffie-Hellman | X25519 | `crypto.x25519` |
 | Diffie-Hellman | X448 | `crypto.x448` |
+| Signature | Ed25519 (RFC 8032) | `crypto.ed25519` |
+| Key derivation | HKDF over SHA-256/SHA-512 (RFC 5869) | `crypto.hkdf` |
+| PAKE | SRP-6a client, RFC 5054 group 15 + SHA-512 | `crypto.srp` |
+| Big integers | Arbitrary precision, OpenSSL-preferred modexp | `crypto.bignum` |
 
 ## OpenSSL acceleration
 
@@ -44,9 +48,32 @@ crypto.use_openssl(true) -- safe: falls back to pure Lua when unavailable
 
 Acceleration is applied per primitive and degrades gracefully: if the binding is
 missing, or a particular operation is not supported by it, the pure-Lua path is
-used instead. **The Curve25519/448 Diffie-Hellman functions always use the
-pure-Lua implementations** regardless of this flag, because the shipped
-`lua-openssl` builds cannot perform the raw X25519/X448 operations.
+used instead. **The Curve25519/448 Diffie-Hellman functions and Ed25519 signing
+always use the pure-Lua implementations** regardless of this flag: the shipped
+`lua-openssl` builds cannot perform the raw X25519/X448 operations, and no
+tested build can sign with an Ed25519 key (0.11.1 over OpenSSL 3.6.3 raises
+`not support ed25519`).
+
+Capability is resolved per feature rather than assumed from a version number,
+because builds of the same version differ. You can inspect what the current host
+actually supports:
+
+```lua
+crypto.use_openssl(true)
+local features = crypto.openssl_wrapper.features()
+-- { AAD = false, BN = true, KDF = true, OKP = false }  -- e.g. Control4
+```
+
+Measured behaviour of the bindings covered by CI:
+
+| Binding | AAD | BN | KDF | OKP | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 0.8.5 (Control4 DriverWorks) | no | yes | yes | no | `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so AEAD stays pure Lua here |
+| 0.9.2 | yes | yes | yes | no | first version where AAD works |
+| 0.11.1 (current upstream) | yes | yes | yes | no | |
+
+Note that `bn`'s modular exponentiation is named `powmod`, not `mod_exp`, on
+every build tested.
 
 ## Installation
 
@@ -96,6 +123,28 @@ local alice_priv, alice_pub = crypto.x25519.generate_keypair()
 local bob_priv, bob_pub = crypto.x25519.generate_keypair()
 local shared_a = crypto.x25519.diffie_hellman(alice_priv, bob_pub)
 local shared_b = crypto.x25519.diffie_hellman(bob_priv, alice_pub)
+```
+
+```lua
+-- Ed25519 signatures
+local seed, public_key = crypto.ed25519.generate_keypair()
+local signature = crypto.ed25519.sign(seed, "message")
+assert(crypto.ed25519.verify(public_key, "message", signature))
+
+-- When signing repeatedly with one long-term key, expand it once. This skips
+-- both the SHA-512 of the seed and the public-key scalar multiplication.
+local expanded = crypto.ed25519.expand_private_key(seed)
+local sig2 = crypto.ed25519.sign_expanded(expanded, public_key, "message")
+```
+
+```lua
+-- HKDF key derivation
+local prk = crypto.hkdf.extract("sha512", "Control-Salt", shared_secret)
+local read_key = crypto.hkdf.expand("sha512", prk, "ClientEncrypt-main", 32)
+local write_key = crypto.hkdf.expand("sha512", prk, "ServerEncrypt-main", 32)
+
+-- or in one call
+local key = crypto.hkdf.hkdf_sha512(salt, shared_secret, info, 32)
 assert(shared_a == shared_b)
 ```
 

@@ -10,7 +10,8 @@
 --- `crypto.init`) does not bundle it and the shipped builds are unchanged.
 ---
 --- Do not add runtime code here. Types used by a single module stay in that
---- module, next to what they describe.
+--- module, next to what they describe, and a type already defined in `vendor/`
+--- stays there rather than being restated here.
 
 -- ----------------------------------------------------------------------------
 -- Curve25519 field arithmetic
@@ -27,6 +28,6 @@
 -- ----------------------------------------------------------------------------
 -- Lua 5.1/5.2 have no 64-bit integers and 5.3+ `//` semantics differ, so the
 -- 64-bit primitives (SHA-512, BLAKE2b) carry 64-bit quantities as a pair of
--- 32-bit halves. Used by `utils/bytes`, `sha512` and `blake2`.
-
---- @alias Int64HighLow { [1]: integer, [2]: integer } 64-bit value as {high, low} 32-bit halves
+-- 32-bit halves, used by `utils/bytes`, `sha512` and `blake2`.
+--
+-- Int64HighLow is defined in vendor/bitn.lua, where these halves come from.

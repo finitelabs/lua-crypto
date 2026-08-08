@@ -5,6 +5,7 @@ local x25519 = {}
 
 local bit32 = require("bitn").bit32
 
+local random = require("crypto.random")
 local utils = require("crypto.utils")
 local bytes = utils.bytes
 local benchmark_op = utils.benchmark.benchmark_op
@@ -22,8 +23,9 @@ local table_concat = table.concat
 -- CURVE25519 FIELD ARITHMETIC
 -- ============================================================================
 
---- @alias FieldElement integer[] 16-element array (indices 1-16) representing a field element
---- @alias ProductArray integer[] 31-element array (indices 1-31) for multiplication products
+-- `FieldElement` and `ProductArray` are shared with ed25519 (same field, same
+-- limb layout) and are defined once in `annotations.lua`.
+
 --- @alias ScalarArray integer[] 32-element array (indices 1-32) for scalar bytes
 
 --- Initialize a 16-element field element with zeros
@@ -311,18 +313,13 @@ end
 -- ============================================================================
 
 --- Generate a random Curve25519 private key
+---
+--- Drawn from `crypto.random`, which raises rather than falling back to a weak
+--- generator when the host has no CSPRNG. A guessable ephemeral scalar here
+--- yields the shared secret to anyone who observed the exchange.
 --- @return string private_key 32-byte private key
 function x25519.generate_private_key()
-  -- Better randomness by using time + clock + counter
-  local counter = x25519._key_counter or 0
-  x25519._key_counter = counter + 1
-  math.randomseed(os.time() + os.clock() * 1000000 + counter)
-
-  local key_bytes = {}
-  for i = 1, 32 do
-    key_bytes[i] = string_char(math.random(0, 255))
-  end
-  return table_concat(key_bytes)
+  return random.bytes(32)
 end
 
 --- Derive public key from private key

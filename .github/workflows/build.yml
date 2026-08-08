@@ -74,8 +74,101 @@ jobs:
         run: |
           make test-all
 
+  # The Lua matrix above proves portability across interpreters, but every leg of
+  # it runs with no lua-openssl installed, so it only ever exercises the pure-Lua
+  # paths. This job covers the other axis: which *binding* is present. It matters
+  # because capability differs between builds in ways a version number alone does
+  # not describe, and because the ChaCha20-Poly1305 OpenSSL branch was unreachable
+  # for its whole existence while the pure-Lua tests stayed green.
+  #
+  # The expected feature maps below are measurements, not guesses:
+  #   0.8.5  is the binding shipped on Control4 DriverWorks (verified on a
+  #          controller 2026-08-07, over OpenSSL 3.1.4). Its cipher:update(aad,
+  #          true) ignores the AAD flag and encrypts the AAD as plaintext, which
+  #          reproduces identically on this runner's OpenSSL, so the failure is a
+  #          property of the binding version rather than of the controller.
+  #   0.9.2  is the exact floor at which AAD starts working.
+  #   0.11.1 is current upstream.
+  # Ed25519 is unsupported on all three, which is why crypto.ed25519 never routes
+  # to OpenSSL.
+  openssl-matrix:
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every binding's result; one failing version must not mask another.
+      fail-fast: false
+      matrix:
+        include:
+          - rock: '0.8.5-1'
+            label: 'Control4 DriverWorks build'
+            expect_aad: 'false'
+          - rock: '0.9.2-2'
+            label: 'AAD support floor'
+            expect_aad: 'true'
+          - rock: '0.11.1-1'
+            label: 'current upstream'
+            expect_aad: 'true'
+
+    name: lua-openssl ${{ matrix.rock }} (${{ matrix.label }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v11
+        with:
+          luaVersion: '5.4'
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v5
+        with:
+          luarocksVersion: "3.12.2"
+
+      - name: Install lua-openssl ${{ matrix.rock }}
+        run: luarocks install openssl ${{ matrix.rock }}
+
+      - name: Assert the feature gate resolves as measured
+        env:
+          EXPECT_AAD: ${{ matrix.expect_aad }}
+        run: |
+          lua -e '
+            package.path = "./src/?.lua;./src/?/init.lua;./vendor/?.lua;" .. package.path
+            local crypto = require("crypto")
+            crypto.use_openssl(true)
+            local openssl = require("openssl")
+            local features = crypto.openssl_wrapper.features()
+            local expected = {
+              AAD = os.getenv("EXPECT_AAD") == "true",
+              BN = true,
+              KDF = true,
+              -- No lua-openssl build we ship against can sign with an Ed25519
+              -- key, so this must stay false; if it ever flips, the routing
+              -- decision in crypto.ed25519 deserves revisiting.
+              OKP = false,
+            }
+            local ok = true
+            print("binding reports version: " .. tostring((openssl.version())))
+            for _, name in ipairs({ "AAD", "BN", "KDF", "OKP" }) do
+              local got, want = features[name] == true, expected[name]
+              print(string.format("  %-4s got=%s want=%s", name, tostring(got), tostring(want)))
+              if got ~= want then
+                ok = false
+              end
+            end
+            if not ok then
+              error("feature gate did not resolve as measured for this binding")
+            end
+          '
+
+      - name: Run tests with OpenSSL acceleration enabled
+        env:
+          CRYPTO_USE_OPENSSL: '1'
+        run: make test-all
+
+      - name: Run tests with OpenSSL acceleration disabled
+        run: make test-all
+
   build:
-    needs: test
+    needs: [test, openssl-matrix]
     runs-on: ubuntu-latest
     name: Build Combined Module
     steps:

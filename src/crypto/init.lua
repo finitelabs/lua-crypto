@@ -1,16 +1,20 @@
 --- @module "crypto"
 --- Portable cryptographic primitives for Lua with optional OpenSSL acceleration.
 --- Pure-Lua implementations of hashing (SHA-256/512, BLAKE2), AEAD ciphers
---- (ChaCha20-Poly1305, AES-GCM), the Poly1305 MAC, and Curve25519/448
---- Diffie-Hellman. Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C
---- dependencies.
+--- (ChaCha20-Poly1305, AES-GCM), the Poly1305 MAC, HKDF key derivation,
+--- Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a. Runs on Lua
+--- 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
+---
+--- Key generation draws from `crypto.random`, which uses the host CSPRNG and
+--- raises when there is not one. It never falls back to `math.random`.
 ---
 --- When the host provides the lua-openssl binding (e.g. Control4 DriverWorks OS
 --- >= 3.4.1), hashing and AEAD transparently prefer it for speed and fall back to
 --- the pure-Lua implementations otherwise. The elliptic-curve Diffie-Hellman
---- functions (x25519/x448) always use the portable implementations regardless of
---- the OpenSSL flag -- the shipped lua-openssl builds cannot perform the raw
---- Curve25519/448 operations.
+--- functions (x25519/x448) and Ed25519 signing always use the portable
+--- implementations regardless of the OpenSSL flag -- the shipped lua-openssl
+--- builds cannot perform the raw Curve25519/448 operations, and cannot sign
+--- with an Ed25519 key even when they can import one.
 ---
 --- @usage
 --- local crypto = require("crypto")
@@ -47,14 +51,38 @@ local crypto = {
   --- @type crypto.poly1305
   poly1305 = require("crypto.poly1305"),
 
+  -- Key derivation
+  --- @type crypto.hkdf
+  hkdf = require("crypto.hkdf"),
+
+  -- Cryptographically secure randomness (raises rather than returning weak bytes)
+  --- @type crypto.random
+  random = require("crypto.random"),
+
+  -- Arbitrary-precision integers (OpenSSL-preferred modular exponentiation)
+  --- @type crypto.bignum
+  bignum = require("crypto.bignum"),
+
+  -- Password-authenticated key exchange (client side)
+  --- @type crypto.srp
+  srp = require("crypto.srp"),
+
   -- Diffie-Hellman (always pure Lua)
   --- @type crypto.x25519
   x25519 = require("crypto.x25519"),
   --- @type crypto.x448
   x448 = require("crypto.x448"),
+
+  -- Digital signatures (always pure Lua)
+  --- @type crypto.ed25519
+  ed25519 = require("crypto.ed25519"),
+
+  -- Optional OpenSSL acceleration (exposed for diagnostics and feature queries)
+  --- @type crypto.openssl_wrapper
+  openssl_wrapper = require("crypto.openssl_wrapper"),
 }
 
-local openssl_wrapper = require("crypto.openssl_wrapper")
+local openssl_wrapper = crypto.openssl_wrapper
 
 --- Library version (injected at build time for releases).
 local VERSION = "dev"
@@ -85,8 +113,14 @@ function crypto.selftest()
     "chacha20_poly1305",
     "poly1305",
     "aes_gcm",
+    "hkdf",
+    "random",
+    "bignum",
+    "srp",
     "x25519",
     "x448",
+    "ed25519",
+    "openssl_wrapper",
   }
   local ok = true
   for _, name in ipairs(modules) do

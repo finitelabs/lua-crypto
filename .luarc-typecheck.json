@@ -4,6 +4,5 @@
     "useGitIgnore": false,
     "library": ["vendor"],
     "ignoreDir": [".claude", ".git", ".idea", ".venv", "build", "dist", "node_modules", "vendor"]
-  },
-  "diagnostics": { "disable": ["unnecessary-assert"] }
+  }
 }

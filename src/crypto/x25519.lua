@@ -23,8 +23,9 @@ local table_concat = table.concat
 -- CURVE25519 FIELD ARITHMETIC
 -- ============================================================================
 
---- @alias FieldElement integer[] 16-element array (indices 1-16) representing a field element
---- @alias ProductArray integer[] 31-element array (indices 1-31) for multiplication products
+-- `FieldElement` and `ProductArray` are shared with ed25519 (same field, same
+-- limb layout) and are defined once in `annotations.lua`.
+
 --- @alias ScalarArray integer[] 32-element array (indices 1-32) for scalar bytes
 
 --- Initialize a 16-element field element with zeros

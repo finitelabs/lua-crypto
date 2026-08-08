@@ -1024,10 +1024,26 @@ end
 ---
 --- The verdict is not static: it changes with `crypto.use_openssl()`.
 ---
+--- A false verdict comes with the reason, because the two common causes need
+--- opposite responses and are otherwise indistinguishable: a host that cannot
+--- accelerate has to be designed around, while a caller that never enabled
+--- acceleration just has to make one call. The reason is always present when
+--- `accelerated` is false.
+---
 --- @return boolean accelerated True if OpenSSL will handle modular exponentiation
+--- @return string|nil reason Why it will not, when it will not
 function bignum.is_accelerated()
   local openssl = openssl_wrapper.get(openssl_wrapper.Feature.BN)
-  return openssl ~= nil and accelerator_ready(openssl)
+  if openssl == nil then
+    return false,
+      openssl_wrapper.unavailable_reason(openssl_wrapper.Feature.BN) or "OpenSSL modular exponentiation is unavailable"
+  end
+  if not accelerator_ready(openssl) then
+    return false,
+      "the lua-openssl binding failed bignum's multi-limb known-answer check, "
+        .. "so it is not trusted for modular exponentiation"
+  end
+  return true
 end
 
 -- ============================================================================
@@ -1193,7 +1209,10 @@ function bignum.selftest()
   --- here, so this validates the *routing* and the bytes-in/hex-out conversion,
   --- not real OpenSSL arithmetic: the stand-in's modular exponentiation
   --- delegates to this module's own slow reference path.
-  --- @param options table `spelling` is "powmod" or "mod_exp"; `broken` returns wrong answers
+  --- @param options table `spelling` is "powmod" or "mod_exp"; `broken` returns wrong
+  ---   answers for everything; `small_only` returns right answers for single-limb
+  ---   operands and wrong ones above that, which is what `Feature.BN`'s probe cannot
+  ---   see and `accelerator_ready`'s multi-limb vector exists to catch
   --- @return table binding
   --- @return function calls Returns how many times the exponentiation was invoked
   local function make_binding(options)
@@ -1209,6 +1228,9 @@ function bignum.selftest()
     bnlib[options.spelling or "powmod"] = function(base, exp, modulus)
       calls = calls + 1
       if options.broken then
+        return { value = from_number(1) }
+      end
+      if options.small_only and (#base.value > 1 or #exp.value > 1 or #modulus.value > 1) then
         return { value = from_number(1) }
       end
       return { value = mod_exp_reference(base.value, exp.value, modulus.value) }
@@ -1230,6 +1252,9 @@ function bignum.selftest()
     package.loaded["openssl"] = binding
     if binding == nil then
       -- Force require("openssl") to fail regardless of what this host has.
+      -- Each selftest stubs the same loader independently, which the language
+      -- server reads as redefining one field; that is the intent here.
+      --- @diagnostic disable-next-line: duplicate-set-field
       package.preload["openssl"] = function()
         error("simulated absent binding")
       end
@@ -1660,6 +1685,62 @@ function bignum.selftest()
         local result = bignum.mod_exp(from_number(4), from_number(13), from_number(497))
         install(nil)
         return equals(result, from_number(445))
+      end,
+    },
+    -- ----------------------------------------------- is_accelerated reporting
+    -- A caller told only "false" cannot tell a host that will never accelerate
+    -- from one where nobody called use_openssl(true), and the two need opposite
+    -- responses. Each case below pins the phrase that distinguishes them.
+    {
+      name = "is_accelerated blames the flag when acceleration was never enabled",
+      test = function()
+        install(nil) -- also sets use(false)
+        local accelerated, reason = bignum.is_accelerated()
+        return accelerated == false
+          and type(reason) == "string"
+          and reason:find("crypto.use_openssl(true)", 1, true) ~= nil
+      end,
+    },
+    {
+      name = "is_accelerated blames the host when the binding is absent",
+      test = function()
+        install(nil)
+        openssl_wrapper.use(true)
+        local accelerated, reason = bignum.is_accelerated()
+        install(nil)
+        return accelerated == false
+          and type(reason) == "string"
+          and reason:find("not available", 1, true) ~= nil
+          and reason:find("use_openssl", 1, true) == nil
+      end,
+    },
+    {
+      -- The binding computes 4^13 mod 497 correctly, so Feature.BN's probe
+      -- passes; it is wrong on the multi-limb vector, so mod_exp will not use
+      -- it. is_accelerated must agree with mod_exp, not with the feature gate.
+      name = "is_accelerated blames the known-answer check for a single-limb-only binding",
+      test = function()
+        local binding = make_binding({ small_only = true })
+        install(binding)
+        local gated = openssl_wrapper.get(openssl_wrapper.Feature.BN) ~= nil
+        local accelerated, reason = bignum.is_accelerated()
+        local result = bignum.mod_exp(X, Y, M)
+        install(nil)
+        return gated == true
+          and accelerated == false
+          and type(reason) == "string"
+          and reason:find("known-answer check", 1, true) ~= nil
+          and to_hex(result) == VEC_MOD_EXP_HEX
+      end,
+    },
+    {
+      name = "is_accelerated is true with no reason for a trusted binding",
+      test = function()
+        local binding = make_binding({})
+        install(binding)
+        local accelerated, reason = bignum.is_accelerated()
+        install(nil)
+        return accelerated == true and reason == nil
       end,
     },
   }

@@ -37,8 +37,9 @@ local table_concat = table.concat
 -- CURVE25519 FIELD ARITHMETIC (shared field with X25519: p = 2^255 - 19)
 -- ============================================================================
 
---- @alias FieldElement integer[] 16-element array (indices 1-16) representing a field element
---- @alias ProductArray integer[] 31-element array (indices 1-31) for multiplication products
+-- `FieldElement` and `ProductArray` are shared with x25519 (same field, same
+-- limb layout) and are defined once in `annotations.lua`.
+
 --- @alias ByteArray integer[] Array of byte values (indices start at 1)
 --- @alias EdPoint FieldElement[] 4-element array {X, Y, Z, T} in extended twisted Edwards coordinates
 

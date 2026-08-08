@@ -39,7 +39,10 @@ local table_concat = table.concat
 --- RFC 5869 terms, which fixes both the PRK size and the 255*HashLen output
 --- ceiling.
 ---
---- @alias HkdfHash { hmac: fun(key: string, data: string): string, length: integer }
+--- @class HkdfHash
+--- @field hmac fun(key: string, data: string): string HMAC over this hash
+--- @field length integer HashLen in bytes
+
 --- @type table<string, HkdfHash>
 local HASHES = {
   sha256 = { hmac = sha256.hmac_sha256, length = 32 },

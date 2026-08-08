@@ -156,6 +156,27 @@ lint:
 		exit 1; \
 	fi
 
+# Type-check annotations with the Lua language server
+#
+# `install-deps` already installs lua-language-server, but nothing ran it, so
+# the LuaCATS annotations were only checked by whoever happened to have the
+# server wired into their editor. It catches a different class of problem than
+# luacheck -- duplicate or undefined `@alias`, return counts that disagree with
+# `@return`, fields missing from a `@class` -- so it is a separate target.
+#
+# Deliberately NOT part of `check`: a handful of type-narrowing and
+# deliberate-bad-argument diagnostics remain, and turning CI red on those is a
+# separate decision from making the check runnable.
+.PHONY: typecheck
+typecheck:
+	@if command -v lua-language-server >/dev/null 2>&1; then \
+		echo "Running lua-language-server..."; \
+		lua-language-server --check "$(CURDIR)/src" --checklevel=Warning --logpath="$(CURDIR)/build/luals"; \
+	else \
+		echo "lua-language-server not found. Install with: make install-deps"; \
+		exit 1; \
+	fi
+
 .PHONY: check
 check: format-check lint
 	@echo "Code quality checks complete."
@@ -190,6 +211,7 @@ help:
 	@echo "  make format             - Format code with stylua"
 	@echo "  make format-check       - Check code formatting"
 	@echo "  make lint               - Lint code with luacheck"
+	@echo "  make typecheck          - Check annotations with lua-language-server"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make install-deps       - Install development dependencies"

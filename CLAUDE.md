@@ -82,7 +82,11 @@ Routing is deliberate and hardwired, not runtime-probed:
   DER succeeds, `sign()` on the resulting key returns nil. `Feature.OKP` exists
   and probes for a completed sign/verify round-trip, so the unavailability is
   declarative and checkable rather than a comment; ed25519 does not consult it
-  because the answer is "never route" on every build we ship to.
+  because the answer is "never route" on every build we ship to. This is not an
+  artefact of Control4's old binding: lua-openssl 0.11.1 over OpenSSL 3.6.3
+  rejects `pkey.new("ed25519")` with `not support ed25519!!!!` as well
+  (measured 2026-08-08), so the pure-Lua route is the current state of the
+  binding rather than a workaround for one embedded build.
 - **hkdf** → no route of its own. It is a thin layer over `hmac_sha256` /
   `hmac_sha512`, which already prefer OpenSSL, so it inherits acceleration
   transitively. `Feature.KDF` is declared but unused; see the rationale comment
@@ -106,6 +110,40 @@ OpenSSL 3.1.4), pinned as regression cases in `openssl_wrapper.selftest()`:
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
 | `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |
+
+### Nothing is accelerated until `crypto.use_openssl(true)` is called
+
+`CRYPTO_USE_OPENSSL` is not set in the DriverWorks environment, so on Control4
+an explicit call is the only thing that turns acceleration on. **Call
+`crypto.use_openssl(true)` during driver init, before any crypto work and
+before any feature query.**
+
+This has its own heading because the failure mode is quiet and expensive rather
+than obvious. A driver that skips the call runs pure Lua everywhere -- measured
+on the dev controller (2026-08-08), SHA-512 over 1 KiB goes from 0.016 ms to
+82.05 ms, a factor of about 5,100. `openssl_wrapper.features()` reports every
+feature false on hardware where four of the five are true, because it reports
+what `get` would return rather than what the binding can do. And
+`srp.is_accelerated()` returns false, so a HAP caller following the guidance
+below fails closed on a controller that was perfectly capable.
+
+Both readings produce the same `false` and need opposite responses, so
+`bignum.is_accelerated()` and `srp.is_accelerated()` return a second value
+naming which one it is:
+
+```lua
+local ok, why = crypto.srp.is_accelerated()
+if not ok then
+  -- "OpenSSL acceleration is not enabled: call crypto.use_openssl(true) ..."
+  -- "the lua-openssl binding is not available on this host"
+  -- "the lua-openssl binding does not support BN"
+  -- "the lua-openssl binding failed bignum's multi-limb known-answer check ..."
+  error("SRP unusable: " .. why)
+end
+```
+
+Fail closed on the boolean, log the reason. The first string is a one-line fix;
+the rest are not.
 
 ### Why bignum must use OpenSSL on Control4
 
@@ -139,6 +177,42 @@ check on the binding. Reading `openssl_wrapper.features().BN` directly is the
 wrong precondition twice over -- it reports true for a binding `bignum` has
 already decided not to trust, and it makes a HAP caller reach through another
 module's internals for a property `crypto.srp` owns.
+
+### What the asymmetric primitives cost on Control4
+
+X25519 and Ed25519 are always pure Lua (see the routing list above), so unlike
+SRP their cost does not move with the acceleration flag. These are what HAP
+Pair-Verify is built out of, measured with `build/crypto-portable.lua` on the
+dev controller (2026-08-08, OS 4.2.1.757028-res, lua-openssl 0.8.5). Every
+figure was taken in the same call as its RFC vector check, so they time a
+correct implementation rather than a fast wrong one.
+
+| operation | per op | vector |
+|---|---|---|
+| X25519 scalar multiplication | 0.459 s | RFC 7748 6.1 |
+| Ed25519 sign, cold from seed | 1.602 s | RFC 8032 7.1 |
+| Ed25519 sign, pre-expanded | 0.786 s | RFC 8032 7.1 |
+| Ed25519 `expand_private_key` | < 0.001 s | |
+| Ed25519 verify | 1.583 s | |
+
+Loading the 519 KB portable build costs 0.065 s to parse plus 0.009 s to
+execute, which lands in driver startup and is cheap enough to ignore.
+
+Two consequences for anything building HAP on top of this:
+
+- **Expand the long-term key once.** `sign_expanded` is 2.04x faster than
+  `sign`, and `expand_private_key` is free at this resolution, so a controller
+  that re-signs with the same key on every connection should hold the expanded
+  form. A full Pair-Verify is two scalar multiplications, one sign and one
+  verify: `2(0.459) + 0.786 + 1.583 = 3.29 s`. That is workable only with a
+  persistent session, so the cost is paid once per connection rather than once
+  per app launch.
+- **Do not run the chain synchronously.** These block the Lua thread, and a
+  single 1.583 s verify is a long time to hold it -- long enough to starve other
+  drivers, which is the same failure the unaccelerated `mod_exp` above produces.
+  Pair-Verify almost certainly needs its steps spread across timer callbacks.
+  That is a driver concern rather than a library one, but it follows directly
+  from these numbers.
 
 ### Randomness is a capability, not an optimisation
 

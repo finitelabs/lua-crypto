@@ -211,6 +211,7 @@ end
 ---
 --- @class crypto.srp.Session
 --- @field group SrpGroup Group in use
+--- @field params table Parsed group from `resolve_group`
 --- @field hash SrpHash Hash in use
 --- @field username string Identity `I`
 --- @field password string Password `P`
@@ -402,7 +403,13 @@ end
 --- have to reach through `openssl_wrapper.features()` into another module's
 --- internals to do so.
 ---
+--- The second return value says *why* an exchange would be slow, which matters
+--- because "this host has no usable binding" and "nobody called
+--- `crypto.use_openssl(true)`" are the same `false` and have nothing else in
+--- common. Fail closed on the boolean; log the reason.
+---
 --- @return boolean accelerated True if modular exponentiation uses OpenSSL
+--- @return string|nil reason Why it does not, when it does not
 function srp.is_accelerated()
   return bignum.is_accelerated()
 end
@@ -812,6 +819,18 @@ function srp.selftest()
       and srp.GROUP_3072.g == 5
       and srp.GROUP_3072.hash == "sha512"
       and #bytes.from_hex(srp.GROUP_3072.N) == 384
+  end)
+
+  -- The accessor exists so a HAP caller does not have to reach into bignum or
+  -- openssl_wrapper, so what matters is that it reports the same verdict *and*
+  -- the same reason, whatever this host happens to be.
+  check("is_accelerated agrees with bignum, reason included", function()
+    local srp_accelerated, srp_reason = srp.is_accelerated()
+    local bn_accelerated, bn_reason = bignum.is_accelerated()
+    return srp_accelerated == bn_accelerated
+      and srp_reason == bn_reason
+      and type(srp_accelerated) == "boolean"
+      and (srp_accelerated or type(srp_reason) == "string")
   end)
 
   print(string.format("\nSRP result: %d/%d tests passed\n", passed, total))

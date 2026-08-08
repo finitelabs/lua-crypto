@@ -223,6 +223,9 @@ function random.selftest()
   local function starve()
     random.reset()
     package.loaded["openssl"] = nil
+    -- Each selftest stubs the same loader independently, which the language
+    -- server reads as redefining one field; that is the intent here.
+    --- @diagnostic disable-next-line: duplicate-set-field
     package.preload["openssl"] = function()
       error("simulated absent binding")
     end

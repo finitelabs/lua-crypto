@@ -307,8 +307,40 @@ function openssl_wrapper.get_ungated(feature)
   return supports(openssl, feature) and openssl or nil
 end
 
+--- Explain why `get(feature)` is returning nil.
+---
+--- `get` collapses three different situations into one `nil`, and two of them
+--- look identical to a caller while having opposite remedies: a host that
+--- cannot accelerate is a fact to design around, whereas a host that has simply
+--- not called `use(true)` yet is a one-line initialisation bug. The second is
+--- the likely one on Control4, where `CRYPTO_USE_OPENSSL` is not set in the
+--- DriverWorks environment, so a driver that forgets the call reads as "no
+--- binding" for every feature on hardware that has four of them.
+---
+--- @param feature OpenSSLFeature? Feature to explain; omit to ask only about the flag and the binding
+--- @return string|nil reason Human-readable cause, or nil when the feature is available
+function openssl_wrapper.unavailable_reason(feature)
+  if not _use_openssl then
+    return "OpenSSL acceleration is not enabled: call crypto.use_openssl(true) during initialisation "
+      .. "(CRYPTO_USE_OPENSSL is not set in every host environment, notably Control4 DriverWorks)"
+  end
+  local openssl = load_binding()
+  if openssl == nil then
+    return "the lua-openssl binding is not available on this host"
+  end
+  if feature ~= nil and not supports(openssl, feature) then
+    return "the lua-openssl binding does not support " .. tostring(feature)
+  end
+  return nil
+end
+
 --- Report which features the currently loaded binding supports.
---- Intended for diagnostics; forces resolution of every declared feature.
+---
+--- Intended for diagnostics. It reports what `get` would return, so every entry
+--- is false while acceleration is off, regardless of what the host can do --
+--- call `unavailable_reason` to tell that case apart from a binding that really
+--- lacks the feature.
+---
 --- @return table<OpenSSLFeature, boolean> features Support map (empty when the binding is unavailable)
 function openssl_wrapper.features()
   local report = {}
@@ -347,6 +379,9 @@ function openssl_wrapper.selftest()
     if stub == nil then
       -- Force require("openssl") to fail regardless of what this host actually
       -- has installed, so the fallback case is deterministic everywhere.
+      -- Each selftest stubs the same loader independently, which the language
+      -- server reads as redefining one field; that is the intent here.
+      --- @diagnostic disable-next-line: duplicate-set-field
       package.preload["openssl"] = function()
         error("simulated absent binding")
       end
@@ -463,6 +498,44 @@ function openssl_wrapper.selftest()
       test = function()
         install(nil)
         return openssl_wrapper.get(OpenSSLFeature.AAD) == nil
+      end,
+    },
+    -- `get` returns the same nil for three unrelated situations. The point of
+    -- `unavailable_reason` is that it separates them, so each case is pinned to
+    -- the phrase a caller would act on rather than merely to "some string".
+    {
+      name = "unavailable_reason blames the flag, not the host, when acceleration is off",
+      test = function()
+        install(stub_openssl("0.9.2"))
+        openssl_wrapper.use(false)
+        local reason = openssl_wrapper.unavailable_reason(OpenSSLFeature.AAD)
+        return type(reason) == "string" and reason:find("crypto.use_openssl(true)", 1, true) ~= nil
+      end,
+    },
+    {
+      name = "unavailable_reason blames the host when the binding is absent",
+      test = function()
+        install(nil)
+        local reason = openssl_wrapper.unavailable_reason(OpenSSLFeature.AAD)
+        return type(reason) == "string"
+          and reason:find("not available", 1, true) ~= nil
+          and reason:find("use_openssl", 1, true) == nil
+      end,
+    },
+    {
+      name = "unavailable_reason names the feature a present binding lacks",
+      test = function()
+        install(stub_openssl("0.8.5"))
+        local reason = openssl_wrapper.unavailable_reason(OpenSSLFeature.AAD)
+        return type(reason) == "string" and reason:find("does not support AAD", 1, true) ~= nil
+      end,
+    },
+    {
+      name = "unavailable_reason is nil when the feature is available",
+      test = function()
+        install(stub_openssl("0.9.2"))
+        return openssl_wrapper.unavailable_reason(OpenSSLFeature.AAD) == nil
+          and openssl_wrapper.unavailable_reason() == nil
       end,
     },
     {

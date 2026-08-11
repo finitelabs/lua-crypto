@@ -21,18 +21,24 @@ lua-crypto/
 │   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
+│   ├── annotations.lua       # Shared LuaCATS aliases (workspace-wide; not require'd)
 │   └── utils/
 │       ├── init.lua          # Utils aggregator (bytes, benchmark)
 │       ├── bytes.lua         # Byte/hex helpers
 │       └── benchmark.lua     # Benchmarking utilities
 ├── vendor/
 │   └── bitn.lua              # Vendored lua-bitn (bundled into the single-file build)
+├── tools/
+│   └── generate_srp_vectors.py  # Regenerates the SRP vectors in srp.lua
 ├── .github/workflows/
-│   ├── build.yml             # CI: lint, test matrix, build
+│   ├── build.yml             # CI: check, test matrix, openssl-matrix, build
 │   └── release.yml           # Release automation
+├── .luarc-typecheck.json     # Hardened config for `make typecheck` (see below)
+├── .luacheckrc
 ├── run_tests.sh              # Main test runner
 ├── run_tests_matrix.sh       # Multi-version test runner
 ├── run_benchmarks.sh         # Benchmark runner
+├── run_benchmarks_matrix.sh
 └── Makefile                  # Build automation
 ```
 
@@ -44,9 +50,75 @@ make test-sha512       # Run a specific module's self-test
 make test-matrix       # Run across Lua versions
 make bench             # Run benchmarks
 make format            # Format code with stylua
+make format-check      # Verify formatting without rewriting
 make lint              # Lint with luacheck
+make typecheck         # Check LuaCATS annotations with lua-language-server
+make check             # Full gate: format-check + lint + typecheck
 make build             # Build single-file distribution (build/crypto.lua)
 ```
+
+`make check` is the gate CI runs. `make all` is `format lint test build`, which
+rewrites `src/` in place and runs neither `format-check` nor `typecheck` — it is
+not a substitute for `check`. `make help` is stale on this point: it describes
+`check` as "format-check and lint" and omits typecheck.
+
+### typecheck
+
+`make typecheck` runs lua-language-server against the committed
+`.luarc-typecheck.json`. It catches what luacheck does not: undefined or duplicate
+`@alias`, returns that disagree with `@return`, fields missing from a `@class`.
+
+It checks the whole repo rather than `src/` alone. `@alias` resolves
+workspace-wide — which is why `src/crypto/annotations.lua` is never `require`d by
+anything and still matters — so a narrower scope gives *different* findings, not
+fewer.
+
+`--configpath` displaces each individual setting the committed config declares,
+not each table, so a knob is only closed if it is named. Suppression keys can be
+enumerated from the diagnostics read sites — the paths below are inside a
+lua-language-server source checkout, not this repo:
+
+    grep -rhoE "config\.get\([^,]*, *'Lua\.[A-Za-z.]+'" \
+      script/core/diagnostics/*.lua script/provider/diagnostic.lua
+
+Treat that as a floor, not a ceiling: its file scope is the shape of its blind
+spot. Anything that gates file loading or rewrites source before analysis is read
+elsewhere, and has to be enumerated separately from `script/plugin.lua` and
+`script/workspace.lua`. `runtime.plugin` is the case that matters, and the grep
+cannot surface it by construction. `check_worker.lua` does `require 'plugin'`, so
+an `OnSetText` returning an empty edit blanks every file in the repo and the check
+passes having analysed nothing.
+
+Two traps decide how a key gets declared, and neither is answered by the key's
+type:
+
+Empty is not always inert, so read the read site. `neededFileStatus` and
+`groupFileStatus` are per-key lookups that fall back to the built-in default, so
+`{}` leaves behaviour untouched. `enableScheme` defaults to `["file"]`, which makes
+`[]` silence the whole check exactly as a local `["git"]` would. It is declared as
+`["file"]` for that reason.
+
+Immunity is per-code, so one planted probe does not measure a key.
+`check_worker.lua`'s `downgrade_checks_to_opened` force-overwrites only codes whose
+default status is `Any`, leaving everything defaulting to `Opened` under local
+control, which is precisely the type-check group this gate exists for. An
+`undefined-global` probe therefore reports `neededFileStatus` as inert while a
+`return-type-mismatch` probe shows it silencing the check. Probe with a type-check
+code.
+
+Any setting `.luarc-typecheck.json` does not name, under any table, is still
+reachable from a local `.luarc.json`. Re-run both enumerations when upgrading the
+server rather than assuming the list stayed complete.
+
+`vendor/` is both a `library` and an `ignoreDir`: `ignoreDir` keeps the vendored
+code from being diagnosed here, `library` keeps its definitions resolvable.
+`runtime.version` is pinned to LuaJIT because that is what Control4 runs.
+
+The server version is not pinned locally. `install-deps` takes whatever Homebrew
+has while CI pins 3.19.0, so compare the version the target prints if a local
+result disagrees with CI.
+
+Part of `check`, so CI enforces it.
 
 ## Architecture
 
@@ -58,7 +130,9 @@ make build             # Build single-file distribution (build/crypto.lua)
 - `crypto.version()` — build-injected version string
 - `crypto.selftest()` — runs every module's known-answer self-test
 
-Each primitive module also exposes its own `selftest()` and `benchmark()`.
+Each primitive module also exposes its own `selftest()`. Most, but not all, also
+expose `benchmark()` — `random` and `openssl_wrapper` have none. `crypto.selftest()`
+guards with `type(mod.selftest) == "function"` rather than assuming the shape.
 
 ### OpenSSL acceleration and fallback
 
@@ -70,8 +144,9 @@ binding is unavailable or lacks the required feature. Enable via
 
 Routing is deliberate and hardwired, not runtime-probed:
 
-- **Hashing and AEAD** (SHA-256/512, ChaCha20-Poly1305, AES-GCM, …) →
-  OpenSSL-preferred, pure-Lua fallback.
+- **Hashing and AEAD** (SHA-256/512, BLAKE2, ChaCha20, ChaCha20-Poly1305,
+  AES-GCM) → OpenSSL-preferred, pure-Lua fallback. Standalone `poly1305` is not
+  among them and is never accelerated.
 - **x25519 / x448** → **always pure Lua.** The shipped `lua-openssl` builds
   (e.g. Control4 DriverWorks, lua-openssl 0.8.x) can import Curve25519/448 keys
   but cannot perform the raw scalar-multiplication/derive operations — a naive
@@ -80,8 +155,7 @@ Routing is deliberate and hardwired, not runtime-probed:
   Verified on a Control4 controller (2026-08-07, lua-openssl 0.8.5):
   `pkey.new("ed25519")` fails outright, and while `pkey.read()` of an RFC 8410
   DER succeeds, `sign()` on the resulting key returns nil. `Feature.OKP` exists
-  and probes for a completed sign/verify round-trip, so the unavailability is
-  declarative and checkable rather than a comment; ed25519 does not consult it
+  and probes for a completed sign/verify round-trip; ed25519 does not consult it
   because the answer is "never route" on every build we ship to. This is not an
   artefact of Control4's old binding: lua-openssl 0.11.1 over OpenSSL 3.6.3
   rejects `pkey.new("ed25519")` with `not support ed25519!!!!` as well
@@ -101,12 +175,16 @@ lazily, once. A version floor alone cannot answer "was this build compiled with
 carry a probe that exercises the real call and checks the answer.
 
 Known Control4 DriverWorks facts (measured 2026-08-07, lua-openssl 0.8.5 over
-OpenSSL 3.1.4), pinned as regression cases in `openssl_wrapper.selftest()`:
+OpenSSL 3.1.4). These are regression-tested by the `openssl-matrix` CI job, which
+installs the real `0.8.5-1`, `0.9.2-2` and `0.11.1-1` rocks and asserts the feature
+map against each. `openssl_wrapper.selftest()` also covers this ground, but it
+drives *injected stand-in bindings* rather than a real one, so it pins the gate's
+verdict for a version string rather than the binding's behaviour:
 
 | Feature | Supported | Note |
 |---|---|---|
 | `AAD` | no | 0.8.5 < 0.9.2 floor. On 0.8.5 `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so ChaCha20-Poly1305 correctly stays pure Lua there. |
-| `BN` | yes | Modular exponentiation is spelled `powmod`, not `mod_exp`. |
+| `BN` | yes | Modular exponentiation is spelled `powmod` on this build. The wrapper accepts either spelling (`bn.powmod` or `bn.mod_exp`) and both are pinned. |
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
 | `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |
@@ -118,9 +196,8 @@ an explicit call is the only thing that turns acceleration on. **Call
 `crypto.use_openssl(true)` during driver init, before any crypto work and
 before any feature query.**
 
-This has its own heading because the failure mode is quiet and expensive rather
-than obvious. A driver that skips the call runs pure Lua everywhere -- measured
-on the dev controller (2026-08-08), SHA-512 over 1 KiB goes from 0.016 ms to
+A driver that skips the call runs pure Lua everywhere -- measured on the dev
+controller (2026-08-08), SHA-512 over 1 KiB goes from 0.016 ms to
 82.05 ms, a factor of about 5,100. `openssl_wrapper.features()` reports every
 feature false on hardware where four of the five are true, because it reports
 what `get` would return rather than what the binding can do. And
@@ -138,6 +215,8 @@ if not ok then
   -- "the lua-openssl binding is not available on this host"
   -- "the lua-openssl binding does not support BN"
   -- "the lua-openssl binding failed bignum's multi-limb known-answer check ..."
+  -- "OpenSSL modular exponentiation is unavailable"  (fallback when the
+  --   wrapper has no more specific reason; do not match only the four above)
   error("SRP unusable: " .. why)
 end
 ```
@@ -173,10 +252,8 @@ silently falling back to something that will hang the controller.
 
 That accessor delegates to `bignum.is_accelerated()`, which applies both of the
 conditions `mod_exp` applies: the feature gate *and* the multi-limb known-answer
-check on the binding. Reading `openssl_wrapper.features().BN` directly is the
-wrong precondition twice over -- it reports true for a binding `bignum` has
-already decided not to trust, and it makes a HAP caller reach through another
-module's internals for a property `crypto.srp` owns.
+check on the binding. `openssl_wrapper.features().BN` is not a substitute — it
+reports true for a binding `bignum` has already decided not to trust.
 
 ### What the asymmetric primitives cost on Control4
 
@@ -200,48 +277,40 @@ execute, which lands in driver startup and is cheap enough to ignore.
 
 Two consequences for anything building HAP on top of this:
 
-- **Expand the long-term key once.** `sign_expanded` is 2.04x faster than
-  `sign`, and `expand_private_key` is free at this resolution, so a controller
-  that re-signs with the same key on every connection should hold the expanded
-  form. A full Pair-Verify is two scalar multiplications, one sign and one
-  verify: `2(0.459) + 0.786 + 1.583 = 3.29 s`. That is workable only with a
-  persistent session, so the cost is paid once per connection rather than once
-  per app launch.
-- **Do not run the chain synchronously.** These block the Lua thread, and a
-  single 1.583 s verify is a long time to hold it -- long enough to starve other
-  drivers, which is the same failure the unaccelerated `mod_exp` above produces.
-  Pair-Verify almost certainly needs its steps spread across timer callbacks.
-  That is a driver concern rather than a library one, but it follows directly
-  from these numbers.
+- **Cache the expanded key _and_ the public key.** `sign_expanded` is 2.04x faster
+  than `sign`, but `expand_private_key` is free at this resolution, so the 0.816 s
+  difference is not the expansion. `ed25519.sign` also derives the public key on
+  every call — `pt_scalarbase` + `pt_pack` — before delegating to
+  `sign_expanded(expanded, public_key, message)`. A caller that holds only the
+  expanded form still pays that scalar multiplication and sees none of the 2.04x.
+  Hold both. A full Pair-Verify is two scalar multiplications, one sign and one
+  verify: `2(0.459) + 0.786 + 1.583 = 3.29 s`, which is workable only with a
+  persistent session.
+- **Do not run the chain synchronously.** A single 1.583 s verify holds the Lua
+  thread long enough to starve other drivers, the same failure the unaccelerated
+  `mod_exp` produces above. Pair-Verify needs its steps spread across timer
+  callbacks.
 
 ### Randomness is a capability, not an optimisation
 
 `crypto.random` returns cryptographically secure bytes or raises. There is no
-weak fallback anywhere in the library: `math.random` is C `rand()` on 5.1 and
-LuaJIT, and on 5.4+ seeding it from the clock actively downgrades a generator the
-runtime had already seeded well, so the old
-`math.randomseed(os.time() + os.clock() * 1000000)` idiom was worse than making
-no call at all. At driver startup it was worth roughly 20 bits.
+weak fallback anywhere in the library: the `math.randomseed(os.time() +
+os.clock() * 1000000)` idiom was worth roughly 20 bits at driver startup, and on
+5.4+ it actively downgrades a generator the runtime had already seeded well.
 
 Sources in order: `openssl.random(n, true)` behind `Feature.RANDOM`, then
 `/dev/urandom`, then failure. Both are live on a Control4 controller -- the
 0.8.5 binding's RNG works, and `/dev/urandom` is readable from inside the driver
 sandbox (measured 2026-08-08).
 
-Two design points worth not re-litigating:
-
-- It resolves through `openssl_wrapper.get_ungated`, not `get`. Everywhere else
-  the acceleration flag picks between two *correct* implementations; here it
-  would pick between a correct one and a broken one, so the flag does not gate
-  it.
-- The probe verifies rather than assumes: `rand_status()` must be true and two
-  full-width draws must differ. A binding whose RNG is stubbed out or wired to a
-  constant passes a version check and a length check but not that one.
+It resolves through `openssl_wrapper.get_ungated`, not `get`, so the acceleration
+flag does not gate it: everywhere else the flag picks between two correct
+implementations, here it would pick between a correct one and a broken one.
 
 Callers holding their own entropy are unaffected -- `ed25519.sign(seed, ...)`,
-`x25519.diffie_hellman(priv, ...)` and `session:set_private(a)` all take key
-material directly. Hosts with neither source can install one with
-`random.set_source(fn)`.
+`x25519.diffie_hellman(priv, ...)` and the SRP `Session:set_private(a)`
+(`src/crypto/srp.lua`) all take key material directly. Hosts with neither source
+can install one with `random.set_source(draw, name)`.
 
 ### bitn dependency
 
@@ -277,14 +346,29 @@ injected from git tags during release.
 
 ## CI/CD
 
-- **build.yml**: on push/PR to main — stylua format check, luacheck lint, test
-  matrix (Lua 5.1–5.4, LuaJIT 2.0/2.1), and single-file build.
-- **release.yml**: on version tags (`v*`) — builds and publishes a release with
-  the `crypto.lua` artifact.
+- **build.yml**: on push/PR to `main` or `master`.
+  - `check` — `make check` (format-check, luacheck, typecheck against
+    lua-language-server 3.19.0).
+  - `test` — `make test-all` across Lua 5.1–5.4 and LuaJIT 2.0/2.1.
+  - `openssl-matrix` — installs the real `lua-openssl` rocks `0.8.5-1`, `0.9.2-2`
+    and `0.11.1-1` and runs the suite against each with acceleration both on and
+    off. This is the only place the DriverWorks feature table above is checked
+    against a real binding rather than a stand-in, so a change to
+    `openssl_wrapper` that passes `check` and `test` can still fail here.
+  - `build` — single-file distributions.
+- **release.yml**: on version tags (`v*`) — publishes **both** `build/crypto.lua`
+  and `build/crypto-portable.lua`. (build.yml's artifact upload keeps only
+  `crypto.lua`; the release carries both.)
 
 ## Code Style
 
 - 2-space indentation
 - 120 column width
 - Double quotes preferred
-- LuaDoc annotations for all public functions
+- LuaCATS annotations on public functions
+
+stylua and luacheck are invoked with these as CLI flags from the Makefile and
+cover `src/` only; there is no `.stylua.toml`. `.luacheckrc` sets
+`max_line_length = false`, so the 120-column limit is enforced by stylua alone.
+`typecheck` deliberately runs over the whole repo instead — see above.
+Annotations are validated where they exist but are nowhere required.

@@ -59,8 +59,7 @@ make build             # Build single-file distribution (build/crypto.lua)
 
 `make check` is the gate CI runs. `make all` is `format lint test build`, which
 rewrites `src/` in place and runs neither `format-check` nor `typecheck` — it is
-not a substitute for `check`. `make help` is stale on this point: it describes
-`check` as "format-check and lint" and omits typecheck.
+not a substitute for `check`.
 
 ### typecheck
 

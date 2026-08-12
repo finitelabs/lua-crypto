@@ -197,7 +197,7 @@ assert(shared_a == shared_b)
 ### Setup
 
 ```bash
-# Install development dependencies (stylua, luacheck, amalg)
+# Install development dependencies (stylua, luacheck, lua-language-server, amalg)
 make install-deps
 ```
 

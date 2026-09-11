@@ -49,7 +49,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
-all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "hkdf" "random" "bignum" "srp" "x25519" "x448" "ed25519" "openssl_wrapper")
+all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "hkdf" "random" "bignum" "srp" "x25519" "x448" "ed25519" "openssl_wrapper" "lpack")
 default_modules=("${all_modules[@]}")
 modules_to_run=("$@")
 
@@ -146,6 +146,15 @@ run_selftest "X25519"             "x25519"            "crypto.x25519"
 run_selftest "X448"               "x448"              "crypto.x448"
 run_selftest "Ed25519"            "ed25519"           "crypto.ed25519"
 run_selftest "OpenSSL gating"     "openssl_wrapper"   "crypto.openssl_wrapper"
+
+# Control4's LuaJIT has string.pack/unpack as lpack, a different dialect: every
+# selftest again with that shape installed before bitn loads.
+run_test "All selftests with lpack-shaped string.pack" "lpack" "
+    dofile('$script_dir/test/lpack_stub.lua')
+    if not require('crypto').selftest() then
+        os.exit(1)
+    end
+  "
 
 passed_count=${#passed_modules[@]}
 failed_count=${#failed_modules[@]}

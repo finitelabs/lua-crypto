@@ -625,22 +625,7 @@ end
 --- @param counter string 16-byte counter block
 --- @return string result Incremented counter
 local function inc_counter(counter)
-  local result = string_sub(counter, 1, 12) -- Keep first 12 bytes
-
-  -- Increment last 4 bytes (big-endian)
-  local val = 0
-  for i = 13, 16 do
-    val = val * 256 + string_byte(counter, i)
-  end
-
-  val = (val + 1) % 0x100000000
-
-  -- Convert back to bytes (big-endian)
-  for i = 3, 0, -1 do
-    result = result .. string_char(bit32_raw_band(bit32_raw_rshift(val, i * 8), 0xFF))
-  end
-
-  return result
+  return string_sub(counter, 1, 12) .. bytes.u32_to_be_bytes(bytes.be_bytes_to_u32(counter, 13) + 1)
 end
 
 --- Generate counter mode keystream

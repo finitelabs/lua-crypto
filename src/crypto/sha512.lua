@@ -20,12 +20,12 @@ local bit64_raw_bnot = bit64.raw_bnot
 local bit64_raw_ror = bit64.raw_ror
 local bit64_raw_rshift = bit64.raw_rshift
 local bit64_new = bit64.new
+local bit64_from_number = bit64.from_number
 local bit32_raw_bxor = bit32.raw_bxor
 local string_char = string.char
 local string_rep = string.rep
 local string_byte = string.byte
 local table_concat = table.concat
-local floor = math.floor
 
 -- SHA-512 uses 64-bit words, but Lua numbers are limited to 2^53-1
 -- We'll work with 32-bit high/low pairs for 64-bit arithmetic
@@ -280,10 +280,7 @@ function sha512.sha512(data)
   -- Append original length as 128-bit big-endian integer
   -- For simplicity, we only support messages < 2^64 bits
   data = data .. string_rep("\0", 8) -- High 64 bits (always 0)
-  -- Low 64 bits of length
-  local len_high = floor(msg_len_bits / 0x100000000)
-  local len_low = msg_len_bits % 0x100000000
-  data = data .. bytes.u64_to_be_bytes({ len_high, len_low })
+  data = data .. bytes.u64_to_be_bytes(bit64_from_number(msg_len_bits))
 
   -- Process message in 128-byte chunks
   for i = 1, #data, 128 do

@@ -14,7 +14,8 @@ local benchmark_op = utils.benchmark.benchmark_op
 local bit32_raw_add = bit32.raw_add
 local bit32_raw_bxor = bit32.raw_bxor
 local bit32_raw_rol = bit32.raw_rol
-local floor = math.floor
+local bit32_u32_to_le_bytes = bit32.u32_to_le_bytes
+local bit32_le_bytes_to_u32 = bit32.le_bytes_to_u32
 local min = math.min
 local string_byte = string.byte
 local string_char = string.char
@@ -56,31 +57,6 @@ end
 -- Pre-allocated arrays for chacha20_block() to avoid repeated allocation
 local block_state = create_word_array()
 local block_working = create_word_array()
-
---- Convert 32-bit word to 4 bytes (little-endian)
---- @param word integer 32-bit word
---- @return integer, integer, integer, integer bytes Four bytes in little-endian order
-local function word_to_bytes(word)
-  local byte1 = word % 256
-  word = floor(word * 0.00390625) -- / 256
-  local byte2 = word % 256
-  word = floor(word * 0.00390625)
-  local byte3 = word % 256
-  word = floor(word * 0.00390625)
-  local byte4 = word % 256
-
-  return byte1, byte2, byte3, byte4
-end
-
---- Convert 4 bytes to 32-bit word (little-endian)
---- @param byte1 integer First byte (least significant)
---- @param byte2 integer Second byte
---- @param byte3 integer Third byte
---- @param byte4 integer Fourth byte (most significant)
---- @return integer word 32-bit word
-local function bytes_to_word(byte1, byte2, byte3, byte4)
-  return byte1 + byte2 * 256 + byte3 * 65536 + byte4 * 16777216
-end
 
 --- ChaCha20 quarter round operation
 --- @param state Word32Array 16-word state array (modified in place)
@@ -125,13 +101,7 @@ local function chacha20_block(key, nonce, counter)
 
   -- 256-bit key (8 words)
   for i = 1, 8 do
-    local base = (i - 1) * 4
-    state[4 + i] = bytes_to_word(
-      string_byte(key, base + 1),
-      string_byte(key, base + 2),
-      string_byte(key, base + 3),
-      string_byte(key, base + 4)
-    )
+    state[4 + i] = bit32_le_bytes_to_u32(key, (i - 1) * 4 + 1)
   end
 
   -- 32-bit counter
@@ -139,13 +109,7 @@ local function chacha20_block(key, nonce, counter)
 
   -- 96-bit nonce (3 words)
   for i = 1, 3 do
-    local base = (i - 1) * 4
-    state[13 + i] = bytes_to_word(
-      string_byte(nonce, base + 1),
-      string_byte(nonce, base + 2),
-      string_byte(nonce, base + 3),
-      string_byte(nonce, base + 4)
-    )
+    state[13 + i] = bit32_le_bytes_to_u32(nonce, (i - 1) * 4 + 1)
   end
 
   -- Create working copy of state
@@ -173,11 +137,9 @@ local function chacha20_block(key, nonce, counter)
     working_state[i] = bit32_raw_add(working_state[i], state[i])
   end
 
-  -- Convert state to byte string (little-endian) - optimized with local references
   local result_bytes = {}
   for i = 1, 16 do
-    local b1, b2, b3, b4 = word_to_bytes(working_state[i])
-    result_bytes[i] = string_char(b1, b2, b3, b4)
+    result_bytes[i] = bit32_u32_to_le_bytes(working_state[i])
   end
 
   return table_concat(result_bytes)

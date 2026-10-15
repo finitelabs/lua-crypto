@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Check
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
 
   test:
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     continue-on-error: false
     strategy:
       fail-fast: true
@@ -101,7 +101,7 @@ jobs:
   # to OpenSSL.
   openssl-matrix:
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       # Report every binding's result; one failing version must not mask another.
       fail-fast: false
@@ -131,8 +131,9 @@ jobs:
         with:
           luarocksVersion: "3.12.2"
 
+      # GCC 14+ makes incompatible-pointer-types an error, which 0.8.5's ocsp.c trips.
       - name: Install lua-openssl ${{ matrix.rock }}
-        run: luarocks install openssl ${{ matrix.rock }}
+        run: luarocks install openssl ${{ matrix.rock }} CFLAGS="-O2 -fPIC -Wno-error=incompatible-pointer-types"
 
       - name: Assert the feature gate resolves as measured
         env:
@@ -177,7 +178,7 @@ jobs:
 
   build:
     needs: [test, openssl-matrix]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     name: Build Combined Module
     steps:
       - uses: actions/checkout@v4

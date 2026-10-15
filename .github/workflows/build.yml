@@ -131,8 +131,9 @@ jobs:
         with:
           luarocksVersion: "3.12.2"
 
+      # GCC 14+ makes incompatible-pointer-types an error, which 0.8.5's ocsp.c trips.
       - name: Install lua-openssl ${{ matrix.rock }}
-        run: luarocks install openssl ${{ matrix.rock }}
+        run: luarocks install openssl ${{ matrix.rock }} CFLAGS="-O2 -fPIC -Wno-error=incompatible-pointer-types"
 
       - name: Assert the feature gate resolves as measured
         env:

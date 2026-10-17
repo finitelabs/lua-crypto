@@ -126,7 +126,13 @@ function crypto.selftest()
   for _, name in ipairs(modules) do
     local mod = crypto[name]
     if type(mod.selftest) == "function" then
+      local accelerated = openssl_wrapper.enabled()
       if mod.selftest() == false then
+        ok = false
+      end
+      -- A host that enabled acceleration and then ran this must still have it.
+      if openssl_wrapper.enabled() ~= accelerated then
+        print("crypto." .. name .. ".selftest() did not restore the OpenSSL acceleration flag")
         ok = false
       end
     end

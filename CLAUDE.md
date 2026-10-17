@@ -114,7 +114,7 @@ code from being diagnosed here, `library` keeps its definitions resolvable.
 `runtime.version` is pinned to LuaJIT because that is what Control4 runs.
 
 The server version is not pinned locally. `install-deps` takes whatever Homebrew
-has while CI pins 3.19.0, so compare the version the target prints if a local
+has while CI pins 3.19.2, so compare the version the target prints if a local
 result disagrees with CI.
 
 Part of `check`, so CI enforces it.
@@ -347,8 +347,8 @@ injected from git tags during release.
 
 - **build.yml**: on push/PR to `main` or `master`.
   - `check` — `make check` (format-check, luacheck, typecheck against
-    lua-language-server 3.19.0).
-  - `test` — `make test-all` across Lua 5.1–5.4 and LuaJIT 2.0/2.1.
+    lua-language-server 3.19.2).
+  - `test` — `make test-all` across Lua 5.1–5.5 and LuaJIT 2.0/2.1.
   - `openssl-matrix` — installs the real `lua-openssl` rocks `0.8.5-1`, `0.9.2-2`
     and `0.11.1-1` and runs the suite against each with acceleration both on and
     off. This is the only place the DriverWorks feature table above is checked

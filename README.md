@@ -2,7 +2,7 @@
 
 A pure Lua implementation of common cryptographic primitives with **zero external
 dependencies** and **optional OpenSSL acceleration**. Runs on Lua 5.1, 5.2, 5.3,
-5.4, and LuaJIT.
+5.4, 5.5, and LuaJIT.
 
 Hashing (SHA-256/512, BLAKE2), AEAD ciphers (ChaCha20-Poly1305, AES-GCM), the
 Poly1305 MAC, the ChaCha20 stream cipher, and Curve25519/448 Diffie-Hellman —

@@ -9,12 +9,13 @@
 --- raises when there is not one. It never falls back to `math.random`.
 ---
 --- When the host provides the lua-openssl binding (e.g. Control4 DriverWorks OS
---- >= 3.4.1), hashing and AEAD transparently prefer it for speed and fall back to
---- the pure-Lua implementations otherwise. The elliptic-curve Diffie-Hellman
---- functions (x25519/x448) and Ed25519 signing always use the portable
---- implementations regardless of the OpenSSL flag -- the shipped lua-openssl
---- builds cannot perform the raw Curve25519/448 operations, and cannot sign
---- with an Ed25519 key even when they can import one.
+--- >= 3.4.1), hashing, AEAD and big-number arithmetic transparently prefer it
+--- for speed and fall back to the pure-Lua implementations otherwise. The
+--- elliptic-curve Diffie-Hellman functions (x25519/x448) and Ed25519 signing
+--- always use the portable implementations regardless of the OpenSSL flag --
+--- the shipped lua-openssl builds cannot perform the raw Curve25519/448
+--- operations, and cannot sign with an Ed25519 key even when they can import
+--- one.
 ---
 --- @usage
 --- local crypto = require("crypto")
@@ -59,7 +60,7 @@ local crypto = {
   --- @type crypto.random
   random = require("crypto.random"),
 
-  -- Arbitrary-precision integers (OpenSSL-preferred modular exponentiation)
+  -- Arbitrary-precision integers (OpenSSL-preferred modexp, and mul and divmod when large)
   --- @type crypto.bignum
   bignum = require("crypto.bignum"),
 
@@ -88,7 +89,7 @@ local openssl_wrapper = crypto.openssl_wrapper
 local VERSION = "dev"
 
 --- Enable or disable OpenSSL acceleration for the primitives that support it
---- (hashing and AEAD). Opt-in and safe: when the lua-openssl binding is
+--- (hashing, AEAD and big-number arithmetic). Opt-in and safe: when the lua-openssl binding is
 --- unavailable, or a given primitive is not accelerated, the pure-Lua
 --- implementation is used automatically. Curve25519/448 always use pure Lua.
 --- @param use boolean

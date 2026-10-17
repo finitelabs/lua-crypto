@@ -18,7 +18,7 @@ lua-crypto/
 │   ├── ed25519.lua           # Ed25519 signatures, RFC 8032 (always pure Lua)
 │   ├── hkdf.lua              # HKDF-Extract/Expand, RFC 5869 (SHA-256/512)
 │   ├── random.lua            # CSPRNG bytes; raises rather than returning weak ones
-│   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp
+│   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp, mul, divmod
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
 │   ├── annotations.lua       # Shared LuaCATS aliases (workspace-wide; not require'd)
@@ -164,6 +164,15 @@ Routing is deliberate and hardwired, not runtime-probed:
   `hmac_sha512`, which already prefer OpenSSL, so it inherits acceleration
   transitively. `Feature.KDF` is declared but unused; see the rationale comment
   in `hkdf.lua`.
+- **bignum** → per operation, behind `Feature.BN`. The size rule is hardwired:
+  `mod_exp` routes at every size; `mul`, `divmod`, `mod` and `mod_mul` route
+  once estimated pure-Lua work reaches `ROUTE_MIN_RATIO` limb products per limb
+  converted, so linear-cost calls (and `add`/`sub`) stay pure Lua at any width.
+  Trust is checked at runtime: each operation must first reproduce its own
+  multi-limb known answer, cached per operation, and `bignum.is_accelerated(op)`
+  reports each. The rule, its measurements and its one known loss (narrow `mul`
+  under LuaJIT's JIT) are in the comment opening `bignum.lua`'s OpenSSL section;
+  measure whether Control4's LuaJIT runs its JIT before changing the rule.
 
 ### Feature gating
 
@@ -183,7 +192,7 @@ verdict for a version string rather than the binding's behaviour:
 | Feature | Supported | Note |
 |---|---|---|
 | `AAD` | no | 0.8.5 < 0.9.2 floor. On 0.8.5 `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so ChaCha20-Poly1305 correctly stays pure Lua there. |
-| `BN` | yes | Modular exponentiation is spelled `powmod` on this build. The wrapper accepts either spelling (`bn.powmod` or `bn.mod_exp`) and both are pinned. |
+| `BN` | yes | Modular exponentiation is spelled `powmod` on this build. The wrapper accepts either spelling (`bn.powmod` or `bn.mod_exp`) and both are pinned. `mul`, `divmod`, `mod` and `mulmod` are present too. `divmod`, `mod`, `mulmod` and `powmod` answer 0 for a zero divisor rather than raising, and `tohex` writes negatives as `-…`, so `bignum` guards both (measured on the 0.8.5, 0.9.2 and 0.11.1 rocks, 2026-10-17). |
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
 | `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |
@@ -361,7 +370,9 @@ injected from git tags during release.
     and `0.11.1-1` and runs the suite against each with acceleration both on and
     off. This is the only place the DriverWorks feature table above is checked
     against a real binding rather than a stand-in, so a change to
-    `openssl_wrapper` that passes `check` and `test` can still fail here.
+    `openssl_wrapper` that passes `check` and `test` can still fail here. It also
+    asserts `bignum.is_accelerated(op)` for every routed bignum operation, since
+    bignum's own selftest accepts a binding it declines.
   - `build` — single-file distributions.
 - **release.yml**: on version tags (`v*`) — publishes **both** `build/crypto.lua`
   and `build/crypto-portable.lua`. (build.yml's artifact upload keeps only

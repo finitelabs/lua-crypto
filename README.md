@@ -13,8 +13,8 @@ portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
 - **Zero Dependencies**: Pure Lua implementation, no C extensions required
 - **Portable**: Runs on any Lua interpreter (5.1+) and LuaJIT
 - **Optional OpenSSL acceleration**: Transparently prefers the host `lua-openssl`
-  binding for hashing and AEAD when available, and falls back to pure Lua
-  automatically
+  binding for hashing, AEAD and big-number arithmetic when available, and falls
+  back to pure Lua automatically
 - **Well-tested**: Every module ships known-answer self-tests (RFC vectors)
 
 ## Supported Algorithms
@@ -32,7 +32,7 @@ portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
 | Signature | Ed25519 (RFC 8032) | `crypto.ed25519` |
 | Key derivation | HKDF over SHA-256/SHA-512 (RFC 5869) | `crypto.hkdf` |
 | PAKE | SRP-6a client, RFC 5054 group 15 + SHA-512 | `crypto.srp` |
-| Big integers | Arbitrary precision, OpenSSL-preferred modexp | `crypto.bignum` |
+| Big integers | Arbitrary precision, OpenSSL-preferred modexp, mul and divmod | `crypto.bignum` |
 | Randomness | CSPRNG bytes, or a hard failure | `crypto.random` |
 
 ## Randomness
@@ -69,7 +69,7 @@ Callers that already have entropy can keep bypassing generation entirely:
 The pure-Lua implementations are the baseline and always work. When the host
 provides the [`lua-openssl`](https://github.com/zhaozg/lua-openssl) binding —
 for example, Control4 DriverWorks exposes it beginning with OS 3.4.1 — you can
-opt in to hardware-accelerated hashing and AEAD:
+opt in to hardware-accelerated hashing, AEAD and big-number arithmetic:
 
 ```lua
 local crypto = require("crypto")
@@ -118,6 +118,14 @@ since entropy is a capability rather than an optimisation.
 
 Note that `bn`'s modular exponentiation is named `powmod`, not `mod_exp`, on
 every build tested.
+
+With `BN` available, `crypto.bignum` routes `mod_exp` through `bn` at any size,
+and `mul`, `divmod`, `mod` and `mod_mul` once the operands are wide enough for
+the conversion in and out to pay for itself: 5-30x faster at 3072 bits. Narrow
+or linear-cost calls stay in pure Lua, where they are faster. Each operation
+must reproduce a known answer before the binding is trusted with it, results
+are identical either way, and `crypto.bignum.is_accelerated(op)` reports per
+operation.
 
 ## Installation
 

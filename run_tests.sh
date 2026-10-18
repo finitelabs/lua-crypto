@@ -148,10 +148,13 @@ run_selftest "Ed25519"            "ed25519"           "crypto.ed25519"
 run_selftest "OpenSSL gating"     "openssl_wrapper"   "crypto.openssl_wrapper"
 
 # Control4's LuaJIT has string.pack/unpack as lpack, a different dialect: every
-# selftest again with that shape installed before bitn loads.
+# selftest again with that shape installed before bitn loads, and with the
+# acceleration flag flipped so every run covers both settings.
 run_test "All selftests with lpack-shaped string.pack" "lpack" "
     dofile('$script_dir/test/lpack_stub.lua')
-    if not require('crypto').selftest() then
+    local crypto = require('crypto')
+    crypto.use_openssl(not crypto.openssl_wrapper.enabled())
+    if not crypto.selftest() then
         os.exit(1)
     end
   "

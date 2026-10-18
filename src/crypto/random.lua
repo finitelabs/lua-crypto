@@ -218,6 +218,7 @@ function random.selftest()
   local saved_path = random._urandom_path
   local saved_preload = package.preload["openssl"]
   local saved_loaded = package.loaded["openssl"]
+  local saved_use = openssl_wrapper.enabled()
 
   --- Force both built-in sources to be unavailable.
   local function starve()
@@ -233,13 +234,13 @@ function random.selftest()
     random._urandom_path = "/nonexistent/crypto-random-selftest"
   end
 
-  --- Restore real detection, including the wrapper's initial opt-in state, so
+  --- Restore real detection, including the caller's acceleration choice, so
   --- running this inside `crypto.selftest()` cannot disturb a later module.
   local function unstarve()
     random.reset()
     package.loaded["openssl"] = saved_loaded
     package.preload["openssl"] = saved_preload
-    openssl_wrapper.use(os.getenv("CRYPTO_USE_OPENSSL") == "1" or os.getenv("CRYPTO_USE_OPENSSL") == "true")
+    openssl_wrapper.use(saved_use)
     random._urandom_path = saved_path
   end
 

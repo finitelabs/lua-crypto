@@ -172,6 +172,13 @@ function openssl_wrapper.use(use)
   _openssl_unavailable = false
 end
 
+--- Whether acceleration is requested, as last set by `use`. Snapshot it before toggling the flag temporarily.
+--- @return boolean enabled
+function openssl_wrapper.enabled()
+  -- Truthy like `get`, not `== true`, or restoring this answer could switch acceleration off.
+  return _use_openssl and true or false
+end
+
 --- Parse semantic version string into comparable components
 --- @param version_str string Version string like "0.9.1" or "1.0.0-rc1"
 --- @return number major Major version number
@@ -491,6 +498,16 @@ function openssl_wrapper.selftest()
         install(stub_openssl("0.9.2"))
         openssl_wrapper.use(false)
         return openssl_wrapper.get(OpenSSLFeature.AAD) == nil
+      end,
+    },
+    {
+      name = "enabled reports what use last set",
+      test = function()
+        openssl_wrapper.use(true)
+        local on = openssl_wrapper.enabled()
+        openssl_wrapper.use(false)
+        local off = openssl_wrapper.enabled()
+        return on == true and off == false
       end,
     },
     {

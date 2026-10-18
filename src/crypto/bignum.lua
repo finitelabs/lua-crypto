@@ -177,6 +177,10 @@ end
 --- @param b BigNum Subtrahend (must not exceed a)
 --- @return BigNum difference
 local function sub_raw(a, b)
+  -- The loop reads only #a limbs of b, and with canonical operands a wider b is a larger b.
+  if #b > #a then
+    error("bignum: subtraction would be negative")
+  end
   local r = {}
   local borrow = 0
   local na = #a
@@ -1204,6 +1208,7 @@ function bignum.selftest()
   -- Snapshot the OpenSSL state so the accelerator tests cannot leak.
   local saved_loaded = package.loaded["openssl"]
   local saved_preload = package.preload["openssl"]
+  local saved_use = openssl_wrapper.enabled()
 
   --- Build a stand-in lua-openssl binding. Real lua-openssl is not installed
   --- here, so this validates the *routing* and the bytes-in/hex-out conversion,
@@ -1437,7 +1442,19 @@ function bignum.selftest()
     {
       name = "sub - rejects a negative result",
       test = function()
+        -- Equal widths too: only the final borrow can catch those.
         return pcall(bignum.sub, Y, X) == false
+          and pcall(bignum.sub, from_number(5), from_number(7)) == false
+          and pcall(bignum.sub, Y, bignum.add(Y, bignum.one())) == false
+      end,
+    },
+    {
+      name = "sub - rejects a wider subtrahend whose low limbs do not borrow",
+      test = function()
+        return pcall(bignum.sub, from_number(5), from_hex("1000000")) == false
+          and pcall(bignum.sub, from_hex("ffffff"), from_hex("1000000")) == false
+          and pcall(bignum.sub, X, bignum.add(X, from_hex("1" .. string_rep("0", 66)))) == false
+          and to_hex(bignum.sub(from_hex("1000000"), from_hex("ffffff"))) == "1"
       end,
     },
     {
@@ -1756,10 +1773,10 @@ function bignum.selftest()
     end
   end
 
-  -- Restore the module-load default so later tests in this process are unaffected.
+  -- Restore the caller's state, acceleration choice included, so later tests in this process are unaffected.
   package.loaded["openssl"] = saved_loaded
   package.preload["openssl"] = saved_preload
-  openssl_wrapper.use(os.getenv("CRYPTO_USE_OPENSSL") == "1" or os.getenv("CRYPTO_USE_OPENSSL") == "true")
+  openssl_wrapper.use(saved_use)
 
   print(string_format("\nBignum result: %d/%d tests passed\n", passed, #tests))
   return passed == #tests

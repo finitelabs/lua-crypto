@@ -327,6 +327,13 @@ vectors). The runner invokes `require("crypto.<module>").selftest()` per module:
 make test-matrix            # across Lua 5.1–5.4 + LuaJIT
 ```
 
+`crypto.selftest()` fails any module whose selftest leaves the acceleration
+flag changed: a driver that enabled acceleration and then ran it would be left
+unaccelerated, which on Control4 makes SRP unusable. A selftest that toggles the
+flag restores what `openssl_wrapper.enabled()` returned, not the
+`CRYPTO_USE_OPENSSL` default. The runner's lpack pass flips the flag, so every
+run covers both settings.
+
 ## Building
 
 `amalg` produces two single-file distributions from `src/crypto/init.lua`:

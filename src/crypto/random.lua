@@ -235,8 +235,7 @@ function random.selftest()
   end
 
   --- Restore real detection, including the caller's acceleration choice, so
-  --- running this inside `crypto.selftest()` cannot disturb a later module or
-  --- leave a host that called `crypto.use_openssl(true)` unaccelerated.
+  --- running this inside `crypto.selftest()` cannot disturb a later module.
   local function unstarve()
     random.reset()
     package.loaded["openssl"] = saved_loaded

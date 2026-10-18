@@ -60,7 +60,7 @@ local crypto = {
   --- @type crypto.random
   random = require("crypto.random"),
 
-  -- Arbitrary-precision integers (OpenSSL-preferred modexp, and mul and divmod when large)
+  -- Arbitrary-precision integers (OpenSSL-preferred)
   --- @type crypto.bignum
   bignum = require("crypto.bignum"),
 

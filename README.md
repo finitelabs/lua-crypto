@@ -120,12 +120,10 @@ Note that `bn`'s modular exponentiation is named `powmod`, not `mod_exp`, on
 every build tested.
 
 With `BN` available, `crypto.bignum` routes `mod_exp` through `bn` at any size,
-and `mul`, `divmod`, `mod` and `mod_mul` once the operands are wide enough for
-the conversion in and out to pay for itself: 5-30x faster at 3072 bits. Narrow
-or linear-cost calls stay in pure Lua, where they are faster. Each operation
-must reproduce a known answer before the binding is trusted with it, results
-are identical either way, and `crypto.bignum.is_accelerated(op)` reports per
-operation.
+and `mul`, `divmod`, `mod` and `mod_mul` once the work outweighs converting the
+operands (5-30x faster at 3072 bits); cheaper calls stay in pure Lua. Each
+operation must first reproduce a known answer, results are identical either
+way, and `crypto.bignum.is_accelerated(op)` reports per operation.
 
 ## Installation
 

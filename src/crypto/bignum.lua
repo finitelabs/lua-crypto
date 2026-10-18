@@ -672,38 +672,17 @@ end
 -- accelerator invisible to callers -- results are identical with and without
 -- it, and selftest() asserts exactly that.
 --
--- Conversion runs in Lua and is linear in the limbs moved; the pure-Lua cost is
--- the schoolbook limb products. So an operation routes only once its estimated
--- work reaches a ratio of limb products per limb converted, which keeps
--- linear-cost calls here at any width: a one-limb factor or divisor, a quotient
--- of a limb or two, operands already reduced. add and sub never route, and
--- mod_add/mod_sub reach the binding only through `mod` with an unreduced
--- operand. mod_exp routes at every size: even a small one does quadratic work
--- per exponent bit.
+-- Conversion runs in Lua and is linear in the limbs moved, while the pure-Lua
+-- cost is the schoolbook limb products, so an operation routes only once its
+-- estimated work per limb converted reaches a ratio. Linear-cost calls (a
+-- one-limb factor or divisor, a narrow quotient, reduced operands, add, sub)
+-- stay here at any width. mod_exp routes at every size.
 --
--- Pure-Lua time over OpenSSL time including both conversions, measured on a
--- Control4 dev controller (2026-10-18: arm64, LuaJIT 2.1.1700206165, lua-openssl
--- 0.8.5) inside a driver with and without its JIT, widths in 24-bit limbs
--- (128 = 3072 bits):
---
---   call                              JIT on   JIT off
---   mul 16x16                          0.34x     1.60x
---   mul 22x22 (SRP's u*x)              0.38x     2.18x
---   mul 48x48                          0.94x
---   mul 64x64                          1.30x
---   mul 128x128                        2.39x    14.69x
---   mul 24x128                         1.04x
---   divmod 40/20                       1.26x     2.07x
---   divmod 256/128                     7.94x
---   mod_mul 8,8,8                      1.06x     1.89x
---   mod_mul 22,128,128 (SRP's k*v)     3.97x
---   mod 129/128 (not routed)           0.29x
---
--- Every finitelabs driver sets jit="1", so the JIT column decides. divmod, mod
--- and mod_mul win at ROUTE_MIN_RATIO (4) in both modes. mul, whose pure-Lua
--- loop the JIT speeds up most, breaks even near 12 with the JIT on (about 3
--- without), hence MUL_ROUTE_MIN_RATIO; without the JIT that gives up at most a
--- few tenths of a millisecond per mid-size multiply.
+-- The ratios were measured on a Control4 controller (arm64, LuaJIT 2.1,
+-- lua-openssl 0.8.5, 2026-10-18) with the JIT on, the case that favours pure
+-- Lua most: divmod, mod and mod_mul win from 4, mul only from 12 (48x48 limbs
+-- 0.94x, 64x64 1.30x, 128x128 2.39x). Without the JIT mul wins from about 3, so
+-- there 12 gives up at most a few tenths of a millisecond per multiply.
 
 --- Binding whose behaviour has been checked, and the verdict per operation.
 --- @type table?
@@ -1226,10 +1205,8 @@ end
 ---
 --- Each operation is checked separately, so the answers can differ. For mul,
 --- divmod, mod and mod_mul, true covers only calls wide enough to route. Losing
---- one costs milliseconds per 3072-bit call on Control4 (mod_mul: 3.6 ms in pure
---- Lua against 0.28 ms). Losing mod_exp costs seconds per call (1.34 ms per
---- exponent bit with the driver's JIT on, 15.5 without, against about 0.02),
---- which is why `srp.is_accelerated` asks about it alone.
+--- one of those costs milliseconds per 3072-bit call; losing mod_exp costs
+--- seconds, which is why `srp.is_accelerated` asks about it alone.
 ---
 --- The verdict is not static: it changes with `crypto.use_openssl()`.
 ---

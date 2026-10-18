@@ -390,12 +390,11 @@ end
 
 --- Whether an exchange will run at usable speed on this host.
 ---
---- SRP-6a's cost is dominated by modular exponentiation over the group modulus.
---- Measured on a Control4 controller (2026-10-18), a client exchange's three
---- exponentiations take about 2.5 s in pure Lua with the driver's JIT on and
---- about 28 s without it, against about 0.04 s through `bn.powmod`. Lua
---- execution is effectively serialised across drivers there, so an
---- unaccelerated exchange stalls every driver on the controller for that long.
+--- SRP-6a's cost is dominated by modular exponentiation. On a Control4
+--- controller (2026-10-18) a client exchange takes about 2.5 s in pure Lua with
+--- LuaJIT's JIT on, about 28 s without it, and about 0.04 s through `bn.powmod`.
+--- Lua there is effectively serialised across drivers, so the pure path stalls
+--- them all for that long.
 ---
 --- This is deliberately advisory. `crypto.bignum` stays portable and will
 --- compute the same answer either way, because the pure path is what makes the

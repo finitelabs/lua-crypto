@@ -169,9 +169,9 @@ Routing is deliberate and hardwired, not runtime-probed:
   `mod_exp` routes at every size; `divmod`, `mod` and `mod_mul` once estimated
   pure-Lua work reaches `ROUTE_MIN_RATIO` (4) limb products per limb converted,
   `mul` at `MUL_ROUTE_MIN_RATIO` (12), so linear-cost calls stay pure Lua. Both
-  ratios come from controller measurements with the driver's JIT on, which every
-  finitelabs driver enables with `jit="1"` on its `<script>` in `driver.xml`;
-  the table is in `bignum.lua`'s OpenSSL section.
+  ratios were measured on a Control4 controller with LuaJIT's JIT on (a driver
+  enables it with `jit="1"` on its `<script>` in `driver.xml`); see `bignum.lua`'s
+  OpenSSL section.
 
 ### Feature gating
 
@@ -239,16 +239,14 @@ small exponents:
 
 | driver | pure-Lua `mod_exp` | 256-bit exponent | full width |
 |---|---|---|---|
-| JIT on (`jit="1"`, every finitelabs driver) | 21 ms + 1.34 ms/bit | ~0.36 s | ~4.1 s |
+| JIT on (`jit="1"` in `driver.xml`) | 21 ms + 1.34 ms/bit | ~0.36 s | ~4.1 s |
 | JIT off | 65 ms + 15.5 ms/bit | ~4.0 s | ~48 s |
 | `bn.powmod` | | 5.13 ms | 60.97 ms |
 
 A Pair-Setup client raises to 256-, 512- and about 1024-bit exponents: about
 2.5 s in pure Lua with the JIT (1.4 s for the largest call), about 28 s without,
 and about 0.04 s through OpenSSL. Lua execution is effectively serialised across
-drivers there, so a pure-Lua exchange stalls every driver for that long. The
-2026-08-07 figure this replaces, 669 ms per bit, does not reproduce with the
-current code in either mode.
+drivers there, so a pure-Lua exchange stalls every driver for that long.
 
 So on Control4 the pure-Lua path is a **correctness reference and a portability
 fallback, not a shippable code path**. `Feature.BN` resolving true is effectively

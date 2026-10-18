@@ -99,9 +99,8 @@ precondition instead of making callers read another module's feature map:
 
 ```lua
 if not crypto.srp.is_accelerated() then
-  -- A pure-Lua exchange takes ~2.5 s on a Control4 controller with the driver's
-  -- JIT on (~28 s without), against ~0.04 s via bn.powmod, and Lua execution is
-  -- serialised across drivers there, so it stalls the whole controller. Refuse.
+  -- Pure Lua takes ~2.5 s per exchange on a Control4 controller (~28 s without
+  -- the JIT) against ~0.04 s via bn.powmod, stalling every driver. Refuse.
 end
 ```
 

@@ -166,11 +166,12 @@ Routing is deliberate and hardwired, not runtime-probed:
   in `hkdf.lua`.
 - **bignum** → per operation, behind `Feature.BN` and that operation's own
   multi-limb known-answer check; `bignum.is_accelerated(op)` reports each.
-  `mod_exp` routes at every size; `mul`, `divmod`, `mod` and `mod_mul` once
-  estimated pure-Lua work reaches `ROUTE_MIN_RATIO` limb products per limb
-  converted, so linear-cost calls stay pure Lua. The measurements and the one
-  known loss (narrow `mul` under LuaJIT's JIT) are in `bignum.lua`'s OpenSSL
-  section; measure whether Control4's LuaJIT runs its JIT before changing it.
+  `mod_exp` routes at every size; `divmod`, `mod` and `mod_mul` once estimated
+  pure-Lua work reaches `ROUTE_MIN_RATIO` (4) limb products per limb converted,
+  `mul` at `MUL_ROUTE_MIN_RATIO` (12), so linear-cost calls stay pure Lua. Both
+  ratios come from controller measurements with the driver's JIT on, which every
+  finitelabs driver enables with `jit="1"` on its `<script>` in `driver.xml`;
+  the table is in `bignum.lua`'s OpenSSL section.
 
 ### Feature gating
 
@@ -232,29 +233,28 @@ the rest are not.
 
 ### Why bignum must use OpenSSL on Control4
 
-Measured on a controller (2026-08-07), pure-Lua `mod_exp` over RFC 5054 group 15,
-timed across exponents of 4/8/16/32/64/96 bits and fitted (R² = 0.9962):
+Measured on the dev controller (2026-10-18: arm64, LuaJIT 2.1.1700206165,
+lua-openssl 0.8.5), pure-Lua `mod_exp` over RFC 5054 group 15, fitted across
+small exponents:
 
-```
-ms = 4982 + 669 * exponent_bits
-```
-
-| exponent | pure Lua | `bn.powmod` | ratio |
+| driver | pure-Lua `mod_exp` | 256-bit exponent | full width |
 |---|---|---|---|
-| 256-bit (SRP `A = g^a mod N`) | ~176 s (2.9 min) | 5.08 ms | ~34,000x |
-| 3072-bit (full width) | ~2061 s (34 min) | 60.92 ms | ~34,000x |
+| JIT on (`jit="1"`, every finitelabs driver) | 21 ms + 1.34 ms/bit | ~0.36 s | ~4.1 s |
+| JIT off | 65 ms + 15.5 ms/bit | ~4.0 s | ~48 s |
+| `bn.powmod` | | 5.13 ms | 60.97 ms |
 
-A full Pair-Setup client does three exponentiations, so pure Lua is on the order
-of **15 minutes** against **under 0.05 s** with OpenSSL. Worse, it is not merely
-slow: a direct attempt at a 256-bit exponent blocked the driver's Lua thread long
-enough that the driver was reset before finishing, and while blocked the
-controller stopped servicing other drivers' Lua too.
+A Pair-Setup client raises to 256-, 512- and about 1024-bit exponents: about
+2.5 s in pure Lua with the JIT (1.4 s for the largest call), about 28 s without,
+and about 0.04 s through OpenSSL. Lua execution is effectively serialised across
+drivers there, so a pure-Lua exchange stalls every driver for that long. The
+2026-08-07 figure this replaces, 669 ms per bit, does not reproduce with the
+current code in either mode.
 
 So on Control4 the pure-Lua path is a **correctness reference and a portability
 fallback, not a shippable code path**. `Feature.BN` resolving true is effectively
 a precondition for HAP pairing on this hardware. Anything built on `crypto.srp`
 should check **`crypto.srp.is_accelerated()`** and fail loudly rather than
-silently falling back to something that will hang the controller.
+silently falling back to something that stalls the controller for seconds.
 
 That accessor delegates to `bignum.is_accelerated()`, which applies both of the
 conditions `mod_exp` applies: the feature gate *and* the multi-limb known-answer

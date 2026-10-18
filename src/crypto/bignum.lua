@@ -177,9 +177,7 @@ end
 --- @param b BigNum Subtrahend (must not exceed a)
 --- @return BigNum difference
 local function sub_raw(a, b)
-  -- The loop below reads only a's width of b, so a wider b would otherwise
-  -- slip through whenever its low limbs happen not to borrow. Both operands
-  -- are canonical, so a wider b is a larger b.
+  -- The loop reads only #a limbs of b, and with canonical operands a wider b is a larger b.
   if #b > #a then
     error("bignum: subtraction would be negative")
   end
@@ -1451,8 +1449,6 @@ function bignum.selftest()
       end,
     },
     {
-      -- Neither subtrahend's low limbs borrow against the minuend, so only the
-      -- width check can see that the result would be negative.
       name = "sub - rejects a wider subtrahend whose low limbs do not borrow",
       test = function()
         return pcall(bignum.sub, from_number(5), from_hex("1000000")) == false
@@ -1777,9 +1773,7 @@ function bignum.selftest()
     end
   end
 
-  -- Restore the caller's state, acceleration choice included, so later tests
-  -- in this process are unaffected and a host that called
-  -- crypto.use_openssl(true) is not left unaccelerated.
+  -- Restore the caller's state, acceleration choice included, so later tests in this process are unaffected.
   package.loaded["openssl"] = saved_loaded
   package.preload["openssl"] = saved_preload
   openssl_wrapper.use(saved_use)

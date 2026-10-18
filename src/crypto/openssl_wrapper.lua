@@ -172,13 +172,10 @@ function openssl_wrapper.use(use)
   _openssl_unavailable = false
 end
 
---- Whether OpenSSL acceleration is currently requested, as last set by `use`.
---- Code that toggles the flag temporarily, such as a selftest, reads this first
---- so it can hand the caller's choice back rather than the environment default.
+--- Whether acceleration is requested, as last set by `use`. Snapshot it before toggling the flag temporarily.
 --- @return boolean enabled
 function openssl_wrapper.enabled()
-  -- Truthy, not `== true`: `get` treats any truthy flag as enabled, and a
-  -- selftest restoring this answer must not switch acceleration off.
+  -- Truthy like `get`, not `== true`, or restoring this answer could switch acceleration off.
   return _use_openssl and true or false
 end
 

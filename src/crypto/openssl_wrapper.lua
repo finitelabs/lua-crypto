@@ -14,7 +14,7 @@
 --- - ChaCha20-Poly1305 AEAD cipher
 --- - AES-GCM AEAD cipher
 --- - ChaCha20 stream cipher
---- - Big-number modular exponentiation (SRP)
+--- - Big-number arithmetic (SRP)
 ---
 --- Note: X25519, X448 and Ed25519 always use the native implementations. The
 --- shipped lua-openssl builds cannot perform the raw scalar-multiplication or
@@ -34,7 +34,8 @@ local OpenSSLFeature = {
   AAD = "AAD",
   --- Key-derivation primitives (`openssl.kdf`), used to accelerate HKDF
   KDF = "KDF",
-  --- Arbitrary-precision integers (`openssl.bn`), used to accelerate modular exponentiation
+  --- Arbitrary-precision integers (`openssl.bn`), used by `crypto.bignum`. The probe only runs
+  --- a one-limb powmod; bignum checks each operation it routes on multi-limb values first.
   BN = "BN",
   --- Raw Octet Key Pair support: creating and *signing* with Ed25519/X25519 keys.
   --- Importing such a key is not sufficient; the probe requires a working signature.

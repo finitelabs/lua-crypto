@@ -163,6 +163,15 @@ jobs:
                 ok = false
               end
             end
+            -- bignum.selftest passes on a binding it declines, so only this loop
+            -- catches a real build failing a per-operation known-answer check.
+            for _, op in ipairs({ "mul", "divmod", "mod", "mod_mul", "mod_exp" }) do
+              local accelerated, reason = crypto.bignum.is_accelerated(op)
+              print(string.format("  bignum.%-7s accelerated=%s %s", op, tostring(accelerated), reason or ""))
+              if not accelerated then
+                ok = false
+              end
+            end
             if not ok then
               error("feature gate did not resolve as measured for this binding")
             end

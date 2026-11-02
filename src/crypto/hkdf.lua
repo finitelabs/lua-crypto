@@ -347,8 +347,8 @@ local hap_vectors = {
 --- Run comprehensive self-test with RFC 5869 and generated test vectors.
 ---
 --- Validates HKDF-Extract and HKDF-Expand for SHA-256 and SHA-512 against
---- known-answer tests, checks the HAP/Companion derivations the driver depends
---- on, and confirms the documented input-validation behaviour.
+--- known-answer tests, checks the HAP/Companion pairing derivations, and confirms
+--- the documented input-validation behaviour.
 ---
 --- @return boolean result True if all tests pass, false otherwise
 function hkdf.selftest()

@@ -302,8 +302,8 @@ local HAP_K = bytes.from_hex(
 )
 
 --- HAP and Apple Companion derivations, with the exact salt and info strings the
---- protocol uses. These are the derivations the Control4 Plex driver will
---- perform, so a regression in the salt/info handling shows up here as a wrong
+--- protocol uses. These are the derivations a HAP or Companion pairing
+--- performs, so a regression in the salt/info handling shows up here as a wrong
 --- key rather than as a pairing failure on hardware.
 local hap_vectors = {
   {

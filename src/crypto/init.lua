@@ -1,9 +1,9 @@
 --- @module "crypto"
 --- Portable cryptographic primitives for Lua with optional OpenSSL acceleration.
 --- Pure-Lua implementations of hashing (SHA-256/512, BLAKE2), AEAD ciphers
---- (ChaCha20-Poly1305, AES-GCM, AES-CCM), the Poly1305 MAC, HKDF key derivation,
---- Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a. Runs on Lua
---- 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
+--- (ChaCha20-Poly1305, AES-GCM, AES-CCM), the Poly1305 MAC, HKDF and PBKDF2 key
+--- derivation, Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a.
+--- Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
 ---
 --- Key generation draws from `crypto.random`, which uses the host CSPRNG and
 --- raises when there is not one. It never falls back to `math.random`.
@@ -57,6 +57,8 @@ local crypto = {
   -- Key derivation
   --- @type crypto.hkdf
   hkdf = require("crypto.hkdf"),
+  --- @type crypto.pbkdf2
+  pbkdf2 = require("crypto.pbkdf2"),
 
   -- Cryptographically secure randomness (raises rather than returning weak bytes)
   --- @type crypto.random
@@ -118,6 +120,7 @@ function crypto.selftest()
     "aes_gcm",
     "aes_ccm",
     "hkdf",
+    "pbkdf2",
     "random",
     "bignum",
     "srp",

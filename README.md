@@ -33,6 +33,7 @@ Control4 DriverWorks.
 | Diffie-Hellman | X448 | `crypto.x448` |
 | Signature | Ed25519 (RFC 8032) | `crypto.ed25519` |
 | Key derivation | HKDF over SHA-256/SHA-512 (RFC 5869) | `crypto.hkdf` |
+| Key derivation | PBKDF2-HMAC-SHA256/SHA512 (RFC 8018) | `crypto.pbkdf2` |
 | PAKE | SRP-6a client, RFC 5054 group 15 + SHA-512 | `crypto.srp` |
 | Big integers | Arbitrary precision, OpenSSL-preferred modexp, mul and divmod | `crypto.bignum` |
 | Randomness | CSPRNG bytes, or a hard failure | `crypto.random` |
@@ -206,6 +207,9 @@ local write_key = crypto.hkdf.expand("sha512", prk, "ServerEncrypt-main", 32)
 
 -- or in one call
 local key = crypto.hkdf.hkdf_sha512(salt, shared_secret, info, 32)
+
+-- PBKDF2: hash, password, salt, iterations, output length
+local derived = crypto.pbkdf2.derive("sha256", password, salt, 10000, 32)
 assert(shared_a == shared_b)
 ```
 

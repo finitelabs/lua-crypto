@@ -19,6 +19,7 @@ lua-crypto/
 │   ├── x448.lua              # Curve448 Diffie-Hellman (always pure Lua)
 │   ├── ed25519.lua           # Ed25519 signatures, RFC 8032 (always pure Lua)
 │   ├── hkdf.lua              # HKDF-Extract/Expand, RFC 5869 (SHA-256/512)
+│   ├── pbkdf2.lua            # PBKDF2-HMAC, RFC 8018 (SHA-256/512)
 │   ├── random.lua            # CSPRNG bytes; raises rather than returning weak ones
 │   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp, mul, divmod
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
@@ -173,6 +174,10 @@ Routing is deliberate and hardwired, not runtime-probed:
   `hmac_sha512`, which already prefer OpenSSL, so it inherits acceleration
   transitively. `Feature.KDF` is declared but unused; see the rationale comment
   in `hkdf.lua`.
+- **pbkdf2** → no route of its own either, for the same reason: one HMAC per
+  iteration per block, each already OpenSSL-preferred. Its selftest runs RFC
+  7914's 80000-iteration vector only where it projects to finish within 10 s
+  (LuaJIT, or HMAC through OpenSSL) and prints a SKIP elsewhere.
 - **bignum** → per operation, behind `Feature.BN` and that operation's own
   multi-limb known-answer check; `bignum.is_accelerated(op)` reports each.
   `mod_exp` routes at every size; `divmod`, `mod` and `mod_mul` once estimated

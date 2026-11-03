@@ -37,8 +37,8 @@
 --- * Pure Lua: `crypto.bignum`, inverting by Fermat's little theorem. It is the
 ---   correctness reference and the portability fallback. One scalar
 ---   multiplication takes about 30 ms under LuaJIT and 75 to 100 ms under PUC
----   Lua 5.1 to 5.5 on a desktop (Apple M1 Max, 2026-11-02); expect several
----   times that on a controller.
+---   Lua 5.1 to 5.5 on a desktop (Apple M1 Max, 2026-11-02). It has not been
+---   timed on a controller.
 ---
 --- `is_accelerated` says which one runs. Like the rest of this library, none of
 --- it is constant time.

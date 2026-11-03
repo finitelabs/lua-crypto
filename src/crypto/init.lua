@@ -2,9 +2,9 @@
 --- Portable cryptographic primitives for Lua with optional OpenSSL acceleration.
 --- Pure-Lua implementations of hashing (SHA-256/512, BLAKE2), AEAD ciphers
 --- (ChaCha20-Poly1305, AES-GCM, AES-CCM), the Poly1305 MAC, HKDF and PBKDF2 key
---- derivation, Curve25519/448 Diffie-Hellman, Ed25519 signatures, SRP-6a, and
---- NIST P-256 group arithmetic. Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with
---- zero C dependencies.
+--- derivation, Curve25519/448 Diffie-Hellman, Ed25519 signatures, SRP-6a, NIST
+--- P-256 group arithmetic and SPAKE2+. Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT
+--- with zero C dependencies.
 ---
 --- Key generation draws from `crypto.random`, which uses the host CSPRNG and
 --- raises when there is not one. It never falls back to `math.random`.
@@ -77,6 +77,10 @@ local crypto = {
   --- @type crypto.p256
   p256 = require("crypto.p256"),
 
+  -- Password-authenticated key exchange over P-256 (both roles)
+  --- @type crypto.spake2plus
+  spake2plus = require("crypto.spake2plus"),
+
   -- Diffie-Hellman (always pure Lua)
   --- @type crypto.x25519
   x25519 = require("crypto.x25519"),
@@ -98,7 +102,7 @@ local openssl_wrapper = crypto.openssl_wrapper
 local VERSION = "dev"
 
 --- Enable or disable OpenSSL acceleration for the primitives that support it
---- (hashing, AEAD and big-number arithmetic). Opt-in and safe: when the lua-openssl binding is
+--- (hashing, AEAD, big-number and P-256 arithmetic). Opt-in and safe: when the lua-openssl binding is
 --- unavailable, or a given primitive is not accelerated, the pure-Lua
 --- implementation is used automatically. Curve25519/448 always use pure Lua.
 --- @param use boolean
@@ -130,6 +134,7 @@ function crypto.selftest()
     "bignum",
     "srp",
     "p256",
+    "spake2plus",
     "x25519",
     "x448",
     "ed25519",

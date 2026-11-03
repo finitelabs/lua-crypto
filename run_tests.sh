@@ -11,7 +11,8 @@
 #
 # Available modules: sha256, sha512, blake2, chacha20, chacha20_poly1305,
 #                    poly1305, aes_gcm, aes_ccm, hkdf, pbkdf2, random, bignum,
-#                    srp, p256, x25519, x448, ed25519, openssl_wrapper
+#                    srp, p256, spake2plus, x25519, x448, ed25519,
+#                    openssl_wrapper
 
 set -e  # Exit on any error
 
@@ -49,7 +50,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Parse command line arguments to determine which modules to run
-all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "hkdf" "pbkdf2" "random" "bignum" "srp" "p256" "x25519" "x448" "ed25519" "openssl_wrapper" "lpack")
+all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "hkdf" "pbkdf2" "random" "bignum" "srp" "p256" "spake2plus" "x25519" "x448" "ed25519" "openssl_wrapper" "lpack")
 default_modules=("${all_modules[@]}")
 modules_to_run=("$@")
 
@@ -145,6 +146,7 @@ run_selftest "Randomness"         "random"            "crypto.random"
 run_selftest "Bignum"             "bignum"            "crypto.bignum"
 run_selftest "SRP-6a"             "srp"               "crypto.srp"
 run_selftest "P-256"              "p256"              "crypto.p256"
+run_selftest "SPAKE2+"            "spake2plus"        "crypto.spake2plus"
 run_selftest "X25519"             "x25519"            "crypto.x25519"
 run_selftest "X448"               "x448"              "crypto.x448"
 run_selftest "Ed25519"            "ed25519"           "crypto.ed25519"

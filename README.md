@@ -35,6 +35,7 @@ Control4 DriverWorks.
 | Key derivation | HKDF over SHA-256/SHA-512 (RFC 5869) | `crypto.hkdf` |
 | Key derivation | PBKDF2-HMAC-SHA256/SHA512 (RFC 8018) | `crypto.pbkdf2` |
 | PAKE | SRP-6a client, RFC 5054 group 15 + SHA-512 | `crypto.srp` |
+| PAKE | SPAKE2+ (RFC 9383), P256-SHA256-HKDF-SHA256-HMAC-SHA256, both roles | `crypto.spake2plus` |
 | Big integers | Arbitrary precision, OpenSSL-preferred modexp, mul and divmod | `crypto.bignum` |
 | Elliptic curve | NIST P-256 points, scalar multiplication, SEC 1 encoding | `crypto.p256` |
 | Randomness | CSPRNG bytes, or a hard failure | `crypto.random` |
@@ -138,10 +139,10 @@ way, and `crypto.bignum.is_accelerated(op)` reports per operation.
 multiplication (`addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`), converting
 only where a point enters or leaves, once the binding has reproduced the
 published 2G and 3G. That is about 53 ms per multiplication on a Control4
-controller; the pure-Lua fallback takes about 30 ms on a desktop under LuaJIT
-and 75-100 ms under PUC Lua, and several times that on a controller.
+controller. The pure-Lua fallback takes about 30 ms on a desktop under LuaJIT
+and 75-100 ms under PUC Lua; it has not been timed on a controller.
 `crypto.p256.is_accelerated()` reports which runs, with a reason when it is
-not OpenSSL.
+not OpenSSL, and `crypto.spake2plus.is_accelerated()` asks the same question.
 
 ## Installation
 
@@ -210,6 +211,18 @@ local sig2 = crypto.ed25519.sign_expanded(expanded, public_key, "message")
 ```
 
 ```lua
+-- SPAKE2+ prover (RFC 9383, P-256). w0 and w1 come from the application's PBKDF,
+-- each half reduced with crypto.p256.reduce.
+local x = crypto.p256.random_scalar()
+local X = crypto.spake2plus.prover_share(w0, x) -- 65 bytes, send to the verifier
+local result, err = crypto.spake2plus.prover_finish(w0, w1, x, X, Y, context, id_prover, id_verifier, {
+  step = coroutine.yield, -- optional: called between the scalar multiplications
+})
+-- Compare the verifier's confirmV with result.verifier_confirm in constant
+-- time, then send result.prover_confirm; result.shared_key is K_shared.
+```
+
+```lua
 -- HKDF key derivation
 local prk = crypto.hkdf.extract("sha512", "Control-Salt", shared_secret)
 local read_key = crypto.hkdf.expand("sha512", prk, "ClientEncrypt-main", 32)
@@ -217,10 +230,10 @@ local write_key = crypto.hkdf.expand("sha512", prk, "ServerEncrypt-main", 32)
 
 -- or in one call
 local key = crypto.hkdf.hkdf_sha512(salt, shared_secret, info, 32)
+assert(shared_a == shared_b)
 
 -- PBKDF2: hash, password, salt, iterations, output length
 local derived = crypto.pbkdf2.derive("sha256", password, salt, 10000, 32)
-assert(shared_a == shared_b)
 ```
 
 ## Development

@@ -24,6 +24,7 @@ lua-crypto/
 │   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp, mul, divmod
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
 │   ├── p256.lua              # NIST P-256 points and scalar multiplication; OpenSSL bn field
+│   ├── spake2plus.lua        # SPAKE2+, RFC 9383 P-256 suite, prover and verifier
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
 │   ├── annotations.lua       # Shared LuaCATS aliases (workspace-wide; not require'd)
 │   └── utils/
@@ -195,6 +196,10 @@ Routing is deliberate and hardwired, not runtime-probed:
   where a point enters or leaves. Otherwise `crypto.bignum`. Points are affine
   byte strings, so toggling the flag never strands one. `p256.is_accelerated()`
   reports which, with reasons in bignum's terms.
+- **spake2plus** → nothing of its own: P-256 through `p256`, SHA-256, HKDF and
+  HMAC through their modules. `spake2plus.is_accelerated()` delegates to `p256`.
+  A full exchange is five scalar multiplications per side, so `opts.step` is
+  called between them for a driver to spread them over timer ticks.
 
 ### Feature gating
 

@@ -36,6 +36,7 @@ Control4 DriverWorks.
 | Key derivation | PBKDF2-HMAC-SHA256/SHA512 (RFC 8018) | `crypto.pbkdf2` |
 | PAKE | SRP-6a client, RFC 5054 group 15 + SHA-512 | `crypto.srp` |
 | Big integers | Arbitrary precision, OpenSSL-preferred modexp, mul and divmod | `crypto.bignum` |
+| Elliptic curve | NIST P-256 points, scalar multiplication, SEC 1 encoding | `crypto.p256` |
 | Randomness | CSPRNG bytes, or a hard failure | `crypto.random` |
 
 ## Randomness
@@ -132,6 +133,15 @@ and `mul`, `divmod`, `mod` and `mod_mul` once the work outweighs converting the
 operands (5-30x faster at 3072 bits); cheaper calls stay in pure Lua. Each
 operation must first reproduce a known answer, results are identical either
 way, and `crypto.bignum.is_accelerated(op)` reports per operation.
+
+`crypto.p256` keeps its field elements as `bn` handles for a whole scalar
+multiplication (`addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`), converting
+only where a point enters or leaves, once the binding has reproduced the
+published 2G and 3G. That is about 53 ms per multiplication on a Control4
+controller; the pure-Lua fallback takes about 30 ms on a desktop under LuaJIT
+and 75-100 ms under PUC Lua, and several times that on a controller.
+`crypto.p256.is_accelerated()` reports which runs, with a reason when it is
+not OpenSSL.
 
 ## Installation
 

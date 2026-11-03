@@ -2,14 +2,15 @@
 --- Portable cryptographic primitives for Lua with optional OpenSSL acceleration.
 --- Pure-Lua implementations of hashing (SHA-256/512, BLAKE2), AEAD ciphers
 --- (ChaCha20-Poly1305, AES-GCM, AES-CCM), the Poly1305 MAC, HKDF and PBKDF2 key
---- derivation, Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a.
---- Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
+--- derivation, Curve25519/448 Diffie-Hellman, Ed25519 signatures, SRP-6a, and
+--- NIST P-256 group arithmetic. Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT with
+--- zero C dependencies.
 ---
 --- Key generation draws from `crypto.random`, which uses the host CSPRNG and
 --- raises when there is not one. It never falls back to `math.random`.
 ---
 --- When the host provides the lua-openssl binding (e.g. Control4 DriverWorks OS
---- >= 3.4.1), hashing, AEAD and big-number arithmetic transparently prefer it
+--- >= 3.4.1), hashing, AEAD, big-number and P-256 arithmetic transparently prefer it
 --- for speed and fall back to the pure-Lua implementations otherwise. The
 --- elliptic-curve Diffie-Hellman functions (x25519/x448) and Ed25519 signing
 --- always use the portable implementations regardless of the OpenSSL flag --
@@ -72,6 +73,10 @@ local crypto = {
   --- @type crypto.srp
   srp = require("crypto.srp"),
 
+  -- NIST P-256 group arithmetic (OpenSSL-preferred)
+  --- @type crypto.p256
+  p256 = require("crypto.p256"),
+
   -- Diffie-Hellman (always pure Lua)
   --- @type crypto.x25519
   x25519 = require("crypto.x25519"),
@@ -124,6 +129,7 @@ function crypto.selftest()
     "random",
     "bignum",
     "srp",
+    "p256",
     "x25519",
     "x448",
     "ed25519",

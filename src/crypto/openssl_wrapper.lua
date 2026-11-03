@@ -16,6 +16,7 @@
 --- - AES-CCM's block cipher (raw AES-ECB)
 --- - ChaCha20 stream cipher
 --- - Big-number arithmetic (SRP)
+--- - P-256 field arithmetic
 ---
 --- Note: X25519, X448 and Ed25519 always use the native implementations. The
 --- shipped lua-openssl builds cannot perform the raw scalar-multiplication or

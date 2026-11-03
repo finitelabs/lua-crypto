@@ -23,6 +23,7 @@ lua-crypto/
 │   ├── random.lua            # CSPRNG bytes; raises rather than returning weak ones
 │   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp, mul, divmod
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
+│   ├── p256.lua              # NIST P-256 points and scalar multiplication; OpenSSL bn field
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
 │   ├── annotations.lua       # Shared LuaCATS aliases (workspace-wide; not require'd)
 │   └── utils/
@@ -186,6 +187,14 @@ Routing is deliberate and hardwired, not runtime-probed:
   ratios were measured on a Control4 controller with LuaJIT's JIT on (a driver
   enables it with `jit="1"` on its `<script>` in `driver.xml`); see `bignum.lua`'s
   OpenSSL section.
+- **p256** → its own field interface with two implementations, chosen per
+  operation. Behind `Feature.BN` *and* a known-answer check (the published 2G
+  and 3G through p256's own doubling and addition, plus a square root), field
+  elements stay `openssl.bn` handles for the whole scalar multiplication
+  (`addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`, `powmod`) and convert only
+  where a point enters or leaves. Otherwise `crypto.bignum`. Points are affine
+  byte strings, so toggling the flag never strands one. `p256.is_accelerated()`
+  reports which, with reasons in bignum's terms.
 
 ### Feature gating
 
@@ -210,6 +219,13 @@ verdict for a version string rather than the binding's behaviour:
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
 | `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |
+
+For P-256 (measured on a controller 2026-11-03, OS 4.3, lua-openssl 0.8.5): `bn`
+also has `addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`, `sqrtmod`, `iszero` and
+`compare`. A Jacobian double-and-add on these, with the values kept as `bn`
+handles throughout, takes 53 ms per 256-bit scalar multiplication and matches the
+published 2G and 3G. Converting to and from `crypto.bignum` per field operation
+would be far slower, so `p256` converts only at its edges.
 
 ### Nothing is accelerated until `crypto.use_openssl(true)` is called
 
@@ -381,8 +397,8 @@ injected from git tags during release.
     off. This is the only place the DriverWorks feature table above is checked
     against a real binding rather than a stand-in, so a change to
     `openssl_wrapper` that passes `check` and `test` can still fail here. It also
-    asserts `bignum.is_accelerated(op)` for every routed bignum operation, since
-    bignum's own selftest accepts a binding it declines.
+    asserts `bignum.is_accelerated(op)` for every routed bignum operation and
+    `p256.is_accelerated()`, since both selftests accept a binding they decline.
   - `build` — single-file distributions.
 - **release.yml**: on version tags (`v*`) — publishes **both** `build/crypto.lua`
   and `build/crypto-portable.lua`. (build.yml's artifact upload keeps only

@@ -13,6 +13,7 @@ lua-crypto/
 │   ├── chacha20_poly1305.lua # ChaCha20-Poly1305 AEAD (RFC 8439)
 │   ├── poly1305.lua          # Poly1305 MAC
 │   ├── aes_gcm.lua           # AES-GCM AEAD
+│   ├── aes_core.lua          # AES block cipher shared by the AES modes (internal, not exported)
 │   ├── x25519.lua            # Curve25519 Diffie-Hellman (always pure Lua)
 │   ├── x448.lua              # Curve448 Diffie-Hellman (always pure Lua)
 │   ├── ed25519.lua           # Ed25519 signatures, RFC 8032 (always pure Lua)

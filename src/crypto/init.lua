@@ -1,15 +1,16 @@
 --- @module "crypto"
 --- Portable cryptographic primitives for Lua with optional OpenSSL acceleration.
 --- Pure-Lua implementations of hashing (SHA-256/512, BLAKE2), AEAD ciphers
---- (ChaCha20-Poly1305, AES-GCM), the Poly1305 MAC, HKDF key derivation,
---- Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a. Runs on Lua
---- 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
+--- (ChaCha20-Poly1305, AES-GCM, AES-CCM), the Poly1305 MAC, HKDF and PBKDF2 key
+--- derivation, Curve25519/448 Diffie-Hellman, Ed25519 signatures, SRP-6a, NIST
+--- P-256 group arithmetic and SPAKE2+. Runs on Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT
+--- with zero C dependencies.
 ---
 --- Key generation draws from `crypto.random`, which uses the host CSPRNG and
 --- raises when there is not one. It never falls back to `math.random`.
 ---
 --- When the host provides the lua-openssl binding (e.g. Control4 DriverWorks OS
---- >= 3.4.1), hashing, AEAD and big-number arithmetic transparently prefer it
+--- >= 3.4.1), hashing, AEAD, big-number and P-256 arithmetic transparently prefer it
 --- for speed and fall back to the pure-Lua implementations otherwise. The
 --- elliptic-curve Diffie-Hellman functions (x25519/x448) and Ed25519 signing
 --- always use the portable implementations regardless of the OpenSSL flag --
@@ -43,6 +44,8 @@ local crypto = {
   chacha20_poly1305 = require("crypto.chacha20_poly1305"),
   --- @type crypto.aes_gcm
   aes_gcm = require("crypto.aes_gcm"),
+  --- @type crypto.aes_ccm
+  aes_ccm = require("crypto.aes_ccm"),
 
   -- Stream ciphers
   --- @type crypto.chacha20
@@ -55,6 +58,8 @@ local crypto = {
   -- Key derivation
   --- @type crypto.hkdf
   hkdf = require("crypto.hkdf"),
+  --- @type crypto.pbkdf2
+  pbkdf2 = require("crypto.pbkdf2"),
 
   -- Cryptographically secure randomness (raises rather than returning weak bytes)
   --- @type crypto.random
@@ -67,6 +72,14 @@ local crypto = {
   -- Password-authenticated key exchange (client side)
   --- @type crypto.srp
   srp = require("crypto.srp"),
+
+  -- NIST P-256 group arithmetic (OpenSSL-preferred)
+  --- @type crypto.p256
+  p256 = require("crypto.p256"),
+
+  -- Password-authenticated key exchange over P-256 (both roles)
+  --- @type crypto.spake2plus
+  spake2plus = require("crypto.spake2plus"),
 
   -- Diffie-Hellman (always pure Lua)
   --- @type crypto.x25519
@@ -89,7 +102,7 @@ local openssl_wrapper = crypto.openssl_wrapper
 local VERSION = "dev"
 
 --- Enable or disable OpenSSL acceleration for the primitives that support it
---- (hashing, AEAD and big-number arithmetic). Opt-in and safe: when the lua-openssl binding is
+--- (hashing, AEAD, big-number and P-256 arithmetic). Opt-in and safe: when the lua-openssl binding is
 --- unavailable, or a given primitive is not accelerated, the pure-Lua
 --- implementation is used automatically. Curve25519/448 always use pure Lua.
 --- @param use boolean
@@ -114,10 +127,14 @@ function crypto.selftest()
     "chacha20_poly1305",
     "poly1305",
     "aes_gcm",
+    "aes_ccm",
     "hkdf",
+    "pbkdf2",
     "random",
     "bignum",
     "srp",
+    "p256",
+    "spake2plus",
     "x25519",
     "x448",
     "ed25519",

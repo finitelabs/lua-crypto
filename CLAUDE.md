@@ -13,13 +13,18 @@ lua-crypto/
 │   ├── chacha20_poly1305.lua # ChaCha20-Poly1305 AEAD (RFC 8439)
 │   ├── poly1305.lua          # Poly1305 MAC
 │   ├── aes_gcm.lua           # AES-GCM AEAD
+│   ├── aes_ccm.lua           # AES-CCM AEAD, RFC 3610 / NIST SP 800-38C
+│   ├── aes_core.lua          # AES block cipher + ECB encryptor shared by the AES modes (internal, not exported)
 │   ├── x25519.lua            # Curve25519 Diffie-Hellman (always pure Lua)
 │   ├── x448.lua              # Curve448 Diffie-Hellman (always pure Lua)
 │   ├── ed25519.lua           # Ed25519 signatures, RFC 8032 (always pure Lua)
 │   ├── hkdf.lua              # HKDF-Extract/Expand, RFC 5869 (SHA-256/512)
+│   ├── pbkdf2.lua            # PBKDF2-HMAC, RFC 8018 (SHA-256/512)
 │   ├── random.lua            # CSPRNG bytes; raises rather than returning weak ones
 │   ├── bignum.lua            # Arbitrary-precision integers; OpenSSL-preferred modexp, mul, divmod
 │   ├── srp.lua               # SRP-6a client, RFC 5054 group 15 + SHA-512 (HAP)
+│   ├── p256.lua              # NIST P-256 points and scalar multiplication; OpenSSL bn field
+│   ├── spake2plus.lua        # SPAKE2+, RFC 9383 P-256 suite, prover and verifier
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
 │   ├── annotations.lua       # Shared LuaCATS aliases (workspace-wide; not require'd)
 │   └── utils/
@@ -146,6 +151,13 @@ Routing is deliberate and hardwired, not runtime-probed:
 - **Hashing and AEAD** (SHA-256/512, BLAKE2, ChaCha20, ChaCha20-Poly1305,
   AES-GCM) → OpenSSL-preferred, pure-Lua fallback. Standalone `poly1305` is not
   among them and is never accelerated.
+- **aes_ccm** → the mode is always Lua; only the AES block is routed, through
+  `crypto.aes_core.ecb_encryptor`, to `cipher:encrypt(blocks, key, nil, false)`
+  behind `Feature.ECB`, whose probe checks FIPS-197 blocks for all three key
+  sizes. The counter-mode keystream is one call; the CBC-MAC is a chain, so one
+  call per block. The binding's own `aes-128-ccm` is not used: on 0.8.5 it cannot
+  set the message length, and without AAD it returns no tag (measured on a
+  controller 2026-11-03).
 - **x25519 / x448** → **always pure Lua.** The shipped `lua-openssl` builds
   (e.g. Control4 DriverWorks, lua-openssl 0.8.x) can import Curve25519/448 keys
   but cannot perform the raw scalar-multiplication/derive operations — a naive
@@ -164,6 +176,10 @@ Routing is deliberate and hardwired, not runtime-probed:
   `hmac_sha512`, which already prefer OpenSSL, so it inherits acceleration
   transitively. `Feature.KDF` is declared but unused; see the rationale comment
   in `hkdf.lua`.
+- **pbkdf2** → no route of its own either, for the same reason: one HMAC per
+  iteration per block, each already OpenSSL-preferred. Its selftest runs RFC
+  7914's 80000-iteration vector only where it projects to finish within 10 s
+  (LuaJIT, or HMAC through OpenSSL) and prints a SKIP elsewhere.
 - **bignum** → per operation, behind `Feature.BN` and that operation's own
   multi-limb known-answer check; `bignum.is_accelerated(op)` reports each.
   `mod_exp` routes at every size; `divmod`, `mod` and `mod_mul` once estimated
@@ -172,6 +188,18 @@ Routing is deliberate and hardwired, not runtime-probed:
   ratios were measured on a Control4 controller with LuaJIT's JIT on (a driver
   enables it with `jit="1"` on its `<script>` in `driver.xml`); see `bignum.lua`'s
   OpenSSL section.
+- **p256** → its own field interface with two implementations, chosen per
+  operation. Behind `Feature.BN` *and* a known-answer check (the published 2G
+  and 3G through p256's own doubling and addition, plus a square root), field
+  elements stay `openssl.bn` handles for the whole scalar multiplication
+  (`addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`, `powmod`) and convert only
+  where a point enters or leaves. Otherwise `crypto.bignum`. Points are affine
+  byte strings, so toggling the flag never strands one. `p256.is_accelerated()`
+  reports which, with reasons in bignum's terms.
+- **spake2plus** → nothing of its own: P-256 through `p256`, SHA-256, HKDF and
+  HMAC through their modules. `spake2plus.is_accelerated()` delegates to `p256`.
+  A full exchange is five scalar multiplications per side, so `opts.step` is
+  called between them for a driver to spread them over timer ticks.
 
 ### Feature gating
 
@@ -192,9 +220,17 @@ verdict for a version string rather than the binding's behaviour:
 |---|---|---|
 | `AAD` | no | 0.8.5 < 0.9.2 floor. On 0.8.5 `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so ChaCha20-Poly1305 correctly stays pure Lua there. |
 | `BN` | yes | Modular exponentiation is spelled `powmod` on this build. The wrapper accepts either spelling (`bn.powmod` or `bn.mod_exp`) and both are pinned. `mul`, `divmod`, `mod` and `mulmod` are present too. A zero divisor or modulus answers 0 rather than raising, and `tohex` signs negatives; `bignum` guards both (0.8.5, 0.9.2 and 0.11.1 rocks, 2026-10-17). |
+| `ECB` | yes | `cipher.get("aes-128-ecb"):encrypt(block, key, nil, false)` returns the raw block, no padding (measured 2026-11-03). |
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
 | `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |
+
+For P-256 (measured on a controller 2026-11-03, OS 4.3, lua-openssl 0.8.5): `bn`
+also has `addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`, `sqrtmod`, `iszero` and
+`compare`. A Jacobian double-and-add on these, with the values kept as `bn`
+handles throughout, takes 53 ms per 256-bit scalar multiplication and matches the
+published 2G and 3G. Converting to and from `crypto.bignum` per field operation
+would be far slower, so `p256` converts only at its edges.
 
 ### Nothing is accelerated until `crypto.use_openssl(true)` is called
 
@@ -366,8 +402,8 @@ injected from git tags during release.
     off. This is the only place the DriverWorks feature table above is checked
     against a real binding rather than a stand-in, so a change to
     `openssl_wrapper` that passes `check` and `test` can still fail here. It also
-    asserts `bignum.is_accelerated(op)` for every routed bignum operation, since
-    bignum's own selftest accepts a binding it declines.
+    asserts `bignum.is_accelerated(op)` for every routed bignum operation and
+    `p256.is_accelerated()`, since both selftests accept a binding they decline.
   - `build` — single-file distributions.
 - **release.yml**: on version tags (`v*`) — publishes **both** `build/crypto.lua`
   and `build/crypto-portable.lua`. (build.yml's artifact upload keeps only

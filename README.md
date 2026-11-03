@@ -4,9 +4,10 @@ A pure Lua implementation of common cryptographic primitives with **zero externa
 dependencies** and **optional OpenSSL acceleration**. Runs on Lua 5.1, 5.2, 5.3,
 5.4, 5.5, and LuaJIT.
 
-Hashing (SHA-256/512, BLAKE2), AEAD ciphers (ChaCha20-Poly1305, AES-GCM), the
-Poly1305 MAC, the ChaCha20 stream cipher, and Curve25519/448 Diffie-Hellman —
-portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
+Hashing (SHA-256/512, BLAKE2), AEAD ciphers (ChaCha20-Poly1305, AES-GCM,
+AES-CCM), the Poly1305 MAC, the ChaCha20 stream cipher, and Curve25519/448
+Diffie-Hellman — portable enough to run inside sandboxed Lua hosts such as
+Control4 DriverWorks.
 
 ## Features
 
@@ -25,14 +26,18 @@ portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
 | Hash | BLAKE2s, BLAKE2b (+ HMAC) | `crypto.blake2` |
 | AEAD | ChaCha20-Poly1305 | `crypto.chacha20_poly1305` |
 | AEAD | AES-GCM | `crypto.aes_gcm` |
+| AEAD | AES-CCM (RFC 3610, NIST SP 800-38C) | `crypto.aes_ccm` |
 | Stream cipher | ChaCha20 | `crypto.chacha20` |
 | MAC | Poly1305 | `crypto.poly1305` |
 | Diffie-Hellman | X25519 | `crypto.x25519` |
 | Diffie-Hellman | X448 | `crypto.x448` |
 | Signature | Ed25519 (RFC 8032) | `crypto.ed25519` |
 | Key derivation | HKDF over SHA-256/SHA-512 (RFC 5869) | `crypto.hkdf` |
+| Key derivation | PBKDF2-HMAC-SHA256/SHA512 (RFC 8018) | `crypto.pbkdf2` |
 | PAKE | SRP-6a client, RFC 5054 group 15 + SHA-512 | `crypto.srp` |
+| PAKE | SPAKE2+ (RFC 9383), P256-SHA256-HKDF-SHA256-HMAC-SHA256, both roles | `crypto.spake2plus` |
 | Big integers | Arbitrary precision, OpenSSL-preferred modexp, mul and divmod | `crypto.bignum` |
+| Elliptic curve | NIST P-256 points, scalar multiplication, SEC 1 encoding | `crypto.p256` |
 | Randomness | CSPRNG bytes, or a hard failure | `crypto.random` |
 
 ## Randomness
@@ -91,7 +96,7 @@ actually supports:
 ```lua
 crypto.use_openssl(true)
 local features = crypto.openssl_wrapper.features()
--- { AAD = false, BN = true, KDF = true, OKP = false, RANDOM = true }  -- e.g. Control4
+-- { AAD = false, BN = true, ECB = true, KDF = true, OKP = false, RANDOM = true }  -- e.g. Control4
 ```
 
 For SRP the difference is not a matter of taste, so `crypto.srp` exposes its own
@@ -106,11 +111,11 @@ end
 
 Measured behaviour of the bindings covered by CI:
 
-| Binding | AAD | BN | KDF | OKP | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 0.8.5 (Control4 DriverWorks) | no | yes | yes | no | `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so AEAD stays pure Lua here |
-| 0.9.2 | yes | yes | yes | no | first version where AAD works |
-| 0.11.1 (current upstream) | yes | yes | yes | no | |
+| Binding | AAD | BN | ECB | KDF | OKP | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.8.5 (Control4 DriverWorks) | no | yes | yes | yes | no | `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so AEAD stays pure Lua here |
+| 0.9.2 | yes | yes | yes | yes | no | first version where AAD works |
+| 0.11.1 (current upstream) | yes | yes | yes | yes | no | |
 
 `RANDOM` is true on all three. It is resolved outside the `use_openssl` flag,
 since entropy is a capability rather than an optimisation.
@@ -118,11 +123,26 @@ since entropy is a capability rather than an optimisation.
 Note that `bn`'s modular exponentiation is named `powmod`, not `mod_exp`, on
 every build tested.
 
+AES-CCM is built in Lua over single AES blocks rather than on the binding's
+`aes-128-ccm`, which cannot set the message length on 0.8.5 and returns no tag
+without associated data. With `ECB` available those blocks go through
+`cipher:encrypt(blocks, key, nil, false)`, and the counter-mode keystream is a
+single call.
+
 With `BN` available, `crypto.bignum` routes `mod_exp` through `bn` at any size,
 and `mul`, `divmod`, `mod` and `mod_mul` once the work outweighs converting the
 operands (5-30x faster at 3072 bits); cheaper calls stay in pure Lua. Each
 operation must first reproduce a known answer, results are identical either
 way, and `crypto.bignum.is_accelerated(op)` reports per operation.
+
+`crypto.p256` keeps its field elements as `bn` handles for a whole scalar
+multiplication (`addmod`, `submod`, `mulmod`, `sqrmod`, `invmod`), converting
+only where a point enters or leaves, once the binding has reproduced the
+published 2G and 3G. That is about 53 ms per multiplication on a Control4
+controller. The pure-Lua fallback takes about 30 ms on a desktop under LuaJIT
+and 75-100 ms under PUC Lua; it has not been timed on a controller.
+`crypto.p256.is_accelerated()` reports which runs, with a reason when it is
+not OpenSSL, and `crypto.spake2plus.is_accelerated()` asks the same question.
 
 ## Installation
 
@@ -167,6 +187,10 @@ local tag = crypto.sha256.hmac_sha256_hex(key, message)
 local sealed = crypto.chacha20_poly1305.encrypt(key, nonce, plaintext, aad)
 local opened = crypto.chacha20_poly1305.decrypt(key, nonce, sealed, aad)
 
+-- AES-CCM takes a 7-13 byte nonce and an even tag length from 4 to 16 (default 16)
+local ccm_sealed = crypto.aes_ccm.encrypt(key, nonce12, plaintext, aad, 16)
+local ccm_opened = crypto.aes_ccm.decrypt(key, nonce12, ccm_sealed, aad, 16)
+
 -- Diffie-Hellman (X25519); generate_keypair() returns private, public
 local alice_priv, alice_pub = crypto.x25519.generate_keypair()
 local bob_priv, bob_pub = crypto.x25519.generate_keypair()
@@ -187,6 +211,18 @@ local sig2 = crypto.ed25519.sign_expanded(expanded, public_key, "message")
 ```
 
 ```lua
+-- SPAKE2+ prover (RFC 9383, P-256). w0 and w1 come from the application's PBKDF,
+-- each half reduced with crypto.p256.reduce.
+local x = crypto.p256.random_scalar()
+local X = crypto.spake2plus.prover_share(w0, x) -- 65 bytes, send to the verifier
+local result, err = crypto.spake2plus.prover_finish(w0, w1, x, X, Y, context, id_prover, id_verifier, {
+  step = coroutine.yield, -- optional: called between the scalar multiplications
+})
+-- Compare the verifier's confirmV with result.verifier_confirm in constant
+-- time, then send result.prover_confirm; result.shared_key is K_shared.
+```
+
+```lua
 -- HKDF key derivation
 local prk = crypto.hkdf.extract("sha512", "Control-Salt", shared_secret)
 local read_key = crypto.hkdf.expand("sha512", prk, "ClientEncrypt-main", 32)
@@ -195,6 +231,9 @@ local write_key = crypto.hkdf.expand("sha512", prk, "ServerEncrypt-main", 32)
 -- or in one call
 local key = crypto.hkdf.hkdf_sha512(salt, shared_secret, info, 32)
 assert(shared_a == shared_b)
+
+-- PBKDF2: hash, password, salt, iterations, output length
+local derived = crypto.pbkdf2.derive("sha256", password, salt, 10000, 32)
 ```
 
 ## Development

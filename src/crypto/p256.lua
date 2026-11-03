@@ -533,11 +533,8 @@ function p256.decode_point(encoded)
     return nil, "p256: x is not the coordinate of a point on the curve"
   end
   y = F.to_bytes(root)
+  -- The root is never zero: P-256 has no point of order 2.
   if (string_byte(y, 32) % 2 == 1) ~= (prefix == 3) then
-    -- Never zero on P-256 (there is no point of order 2), but say so if it were.
-    if F.is_zero(root) then
-      return nil, "p256: x is not the coordinate of a point with that parity"
-    end
     y = negate_coordinate(y)
   end
   return new_point(x, y)

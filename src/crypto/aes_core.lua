@@ -1,13 +1,18 @@
 --- @module "crypto.aes_core"
 --- The AES block cipher (FIPS-197), shared by the AES modes in this library.
 ---
---- Internal: `crypto.aes_gcm` builds on it, and the `crypto` aggregator does
---- not export it. It holds the pure-Lua key schedule and forward block
---- encryption; the AES modes here never use the inverse cipher.
+--- Internal: `crypto.aes_gcm` and `crypto.aes_ccm` build on it, and the `crypto`
+--- aggregator does not export it. It holds the pure-Lua key schedule and forward
+--- block encryption (GCM and CCM never use the inverse cipher), plus
+--- `ecb_encryptor`, which routes whole-block encryption through lua-openssl's
+--- raw AES-ECB when acceleration is enabled and the binding passes
+--- `Feature.ECB`.
 --- @class crypto.aes_core
 local aes_core = {}
 
 local bit32 = require("bitn").bit32
+
+local openssl_wrapper = require("crypto.openssl_wrapper")
 
 -- Local references for performance
 local bit32_raw_band = bit32.raw_band
@@ -15,6 +20,7 @@ local bit32_raw_bxor = bit32.raw_bxor
 local bit32_raw_lshift = bit32.raw_lshift
 local string_byte = string.byte
 local string_char = string.char
+local string_sub = string.sub
 local table_concat = table.concat
 
 -- ============================================================================
@@ -528,5 +534,52 @@ end
 
 aes_core.expand_key = key_expansion
 aes_core.encrypt_block = aes_encrypt_block
+
+--- Build an AES-ECB encryptor for one key.
+---
+--- The returned function encrypts a whole number of 16-byte blocks, each
+--- independently. Returning a function means the key schedule, or the OpenSSL
+--- cipher lookup, is paid once per key rather than once per call.
+---
+--- With acceleration enabled and a binding that passes `Feature.ECB`, each call
+--- is a single `cipher:encrypt(blocks, key, nil, false)` over every block
+--- passed, with padding off, so a caller that batches its blocks (a CTR
+--- keystream) crosses into C once. Otherwise each block runs through the
+--- pure-Lua core.
+---
+--- @param key string AES key (16, 24, or 32 bytes)
+--- @return fun(blocks: string): string encrypt Encrypts a string whose length is a multiple of 16
+function aes_core.ecb_encryptor(key)
+  assert(type(key) == "string" and (#key == 16 or #key == 24 or #key == 32), "AES key must be 16, 24, or 32 bytes")
+
+  local openssl = openssl_wrapper.get(openssl_wrapper.Feature.ECB)
+  if openssl then
+    local cipher = openssl.cipher.get("aes-" .. #key * 8 .. "-ecb")
+    return function(blocks)
+      assert(#blocks % 16 == 0, "AES-ECB input must be a whole number of 16-byte blocks")
+      if #blocks == 0 then
+        return ""
+      end
+      local out = cipher:encrypt(blocks, key, nil, false)
+      if type(out) ~= "string" or #out ~= #blocks then
+        error("AES-ECB: OpenSSL returned " .. (type(out) == "string" and (#out .. " bytes") or type(out)))
+      end
+      return out
+    end
+  end
+
+  local expanded_key, nr = key_expansion(key)
+  return function(blocks)
+    assert(#blocks % 16 == 0, "AES-ECB input must be a whole number of 16-byte blocks")
+    if #blocks == 16 then
+      return aes_encrypt_block(blocks, expanded_key, nr)
+    end
+    local out = {}
+    for i = 1, #blocks, 16 do
+      out[#out + 1] = aes_encrypt_block(string_sub(blocks, i, i + 15), expanded_key, nr)
+    end
+    return table_concat(out)
+  end
+end
 
 return aes_core

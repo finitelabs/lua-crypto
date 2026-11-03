@@ -13,7 +13,8 @@ lua-crypto/
 │   ├── chacha20_poly1305.lua # ChaCha20-Poly1305 AEAD (RFC 8439)
 │   ├── poly1305.lua          # Poly1305 MAC
 │   ├── aes_gcm.lua           # AES-GCM AEAD
-│   ├── aes_core.lua          # AES block cipher shared by the AES modes (internal, not exported)
+│   ├── aes_ccm.lua           # AES-CCM AEAD, RFC 3610 / NIST SP 800-38C
+│   ├── aes_core.lua          # AES block cipher + ECB encryptor shared by the AES modes (internal, not exported)
 │   ├── x25519.lua            # Curve25519 Diffie-Hellman (always pure Lua)
 │   ├── x448.lua              # Curve448 Diffie-Hellman (always pure Lua)
 │   ├── ed25519.lua           # Ed25519 signatures, RFC 8032 (always pure Lua)
@@ -147,6 +148,13 @@ Routing is deliberate and hardwired, not runtime-probed:
 - **Hashing and AEAD** (SHA-256/512, BLAKE2, ChaCha20, ChaCha20-Poly1305,
   AES-GCM) → OpenSSL-preferred, pure-Lua fallback. Standalone `poly1305` is not
   among them and is never accelerated.
+- **aes_ccm** → the mode is always Lua; only the AES block is routed, through
+  `crypto.aes_core.ecb_encryptor`, to `cipher:encrypt(blocks, key, nil, false)`
+  behind `Feature.ECB`, whose probe checks FIPS-197 blocks for all three key
+  sizes. The counter-mode keystream is one call; the CBC-MAC is a chain, so one
+  call per block. The binding's own `aes-128-ccm` is not used: on 0.8.5 it cannot
+  set the message length, and without AAD it returns no tag (measured on a
+  controller 2026-11-03).
 - **x25519 / x448** → **always pure Lua.** The shipped `lua-openssl` builds
   (e.g. Control4 DriverWorks, lua-openssl 0.8.x) can import Curve25519/448 keys
   but cannot perform the raw scalar-multiplication/derive operations — a naive
@@ -193,6 +201,7 @@ verdict for a version string rather than the binding's behaviour:
 |---|---|---|
 | `AAD` | no | 0.8.5 < 0.9.2 floor. On 0.8.5 `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so ChaCha20-Poly1305 correctly stays pure Lua there. |
 | `BN` | yes | Modular exponentiation is spelled `powmod` on this build. The wrapper accepts either spelling (`bn.powmod` or `bn.mod_exp`) and both are pinned. `mul`, `divmod`, `mod` and `mulmod` are present too. A zero divisor or modulus answers 0 rather than raising, and `tohex` signs negatives; `bignum` guards both (0.8.5, 0.9.2 and 0.11.1 rocks, 2026-10-17). |
+| `ECB` | yes | `cipher.get("aes-128-ecb"):encrypt(block, key, nil, false)` returns the raw block, no padding (measured 2026-11-03). |
 | `KDF` | yes | `kdf.derive` present, currently unused. |
 | `OKP` | no | `pkey.new("ed25519")` fails. |
 | `RANDOM` | yes | `random` and `rand_status` both present, `rand_status()` true, `random(n, true)` returns n distinct bytes (measured 2026-08-08). `random(0)` and negative lengths raise. |

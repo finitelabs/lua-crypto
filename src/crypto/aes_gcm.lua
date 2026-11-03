@@ -23,7 +23,7 @@ local string_rep = string.rep
 local string_sub = string.sub
 local table_concat = table.concat
 
--- The block cipher lives in crypto.aes_core.
+-- The block cipher lives in crypto.aes_core, shared with AES-CCM.
 local key_expansion = aes_core.expand_key
 local aes_encrypt_block = aes_core.encrypt_block
 

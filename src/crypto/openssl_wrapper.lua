@@ -13,6 +13,7 @@
 --- - BLAKE2s/BLAKE2b hash functions
 --- - ChaCha20-Poly1305 AEAD cipher
 --- - AES-GCM AEAD cipher
+--- - AES-CCM's block cipher (raw AES-ECB)
 --- - ChaCha20 stream cipher
 --- - Big-number arithmetic (SRP)
 ---
@@ -37,6 +38,9 @@ local OpenSSLFeature = {
   --- Arbitrary-precision integers (`openssl.bn`), used by `crypto.bignum`. The probe only runs
   --- a one-limb powmod; bignum checks each operation it routes on multi-limb values first.
   BN = "BN",
+  --- Raw AES-ECB block encryption with padding off (`cipher:encrypt(blocks, key, nil, false)`),
+  --- used by `crypto.aes_core` for AES-CCM. The probe checks FIPS-197 known answers.
+  ECB = "ECB",
   --- Raw Octet Key Pair support: creating and *signing* with Ed25519/X25519 keys.
   --- Importing such a key is not sufficient; the probe requires a working signature.
   OKP = "OKP",
@@ -45,6 +49,34 @@ local OpenSSLFeature = {
   --- resolved through `get_ungated` rather than `get`.
   RANDOM = "RANDOM",
 }
+
+--- FIPS-197 Appendix C known answers for the ECB probe: one plaintext block and,
+--- per key size, the C.1 (AES-128), C.2 (AES-192) and C.3 (AES-256) key and
+--- ciphertext, all as hex.
+local ECB_PLAINTEXT_HEX = "00112233445566778899aabbccddeeff"
+local ECB_KNOWN_ANSWERS = {
+  { cipher = "aes-128-ecb", key = "000102030405060708090a0b0c0d0e0f", ciphertext = "69c4e0d86a7b0430d8cdb78070b4c55a" },
+  {
+    cipher = "aes-192-ecb",
+    key = "000102030405060708090a0b0c0d0e0f1011121314151617",
+    ciphertext = "dda97ca4864cdfe06eaf70a0ec0d7191",
+  },
+  {
+    cipher = "aes-256-ecb",
+    key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    ciphertext = "8ea2b7ca516745bfeafc49904b496089",
+  },
+}
+
+--- Decode hex to bytes. The wrapper requires nothing from the library, so it
+--- carries its own rather than pulling in `crypto.utils`.
+--- @param hex string Hex digits
+--- @return string bytes
+local function from_hex(hex)
+  return (hex:gsub("..", function(cc)
+    return string.char(tonumber(cc, 16))
+  end))
+end
 
 --- Feature requirement definitions
 ---
@@ -91,6 +123,31 @@ local FeatureRequirements = {
       end)
       -- 4^13 mod 497 == 445 == 0x1BD
       return ok and type(result) == "string" and result:gsub("^0+", ""):lower() == "1bd"
+    end,
+  },
+  [OpenSSLFeature.ECB] = {
+    min_version = "0.8.0",
+    probe = function(openssl)
+      local cipher_lib = openssl.cipher
+      if type(cipher_lib) ~= "table" or type(cipher_lib.get) ~= "function" then
+        return false
+      end
+      -- Measured on a Control4 controller (2026-11-03, lua-openssl 0.8.5):
+      -- cipher.get("aes-128-ecb"):encrypt(block, key, nil, false) returns the
+      -- raw block. Two blocks go in one call, so the answer also proves padding
+      -- is off and that a batch comes back block for block.
+      local plaintext = from_hex(ECB_PLAINTEXT_HEX)
+      for _, answer in ipairs(ECB_KNOWN_ANSWERS) do
+        local cipher = cipher_lib.get(answer.cipher)
+        if cipher == nil then
+          return false
+        end
+        local expected = from_hex(answer.ciphertext)
+        if cipher:encrypt(plaintext .. plaintext, from_hex(answer.key), nil, false) ~= expected .. expected then
+          return false
+        end
+      end
+      return true
     end,
   },
   [OpenSSLFeature.OKP] = {
@@ -444,6 +501,47 @@ function openssl_wrapper.selftest()
     return bn
   end
 
+  --- A `cipher` table that answers the ECB probe's FIPS-197 inputs the way the
+  --- real binding does with padding off: block for block, nil for anything else.
+  --- @param fault string|nil "pad" appends a padding block, "wrong" corrupts the
+  ---   first block, "missing_256" has no aes-256-ecb
+  --- @return table cipher
+  local function ecb_cipher(fault)
+    local answers = {}
+    for _, answer in ipairs(ECB_KNOWN_ANSWERS) do
+      answers[answer.cipher] = answer
+    end
+    return {
+      get = function(name)
+        local answer = answers[name]
+        if answer == nil or (fault == "missing_256" and name == "aes-256-ecb") then
+          return nil
+        end
+        return {
+          encrypt = function(_, data, key, _, pad)
+            if key ~= from_hex(answer.key) then
+              return nil
+            end
+            local out = {}
+            for i = 1, #data, 16 do
+              if data:sub(i, i + 15) ~= from_hex(ECB_PLAINTEXT_HEX) then
+                return nil
+              end
+              out[#out + 1] = from_hex(answer.ciphertext)
+            end
+            if pad ~= false or fault == "pad" then
+              out[#out + 1] = string.rep("\16", 16)
+            end
+            if fault == "wrong" then
+              out[1] = string.rep("\0", 16)
+            end
+            return table.concat(out)
+          end,
+        }
+      end,
+    }
+  end
+
   local tests = {
     {
       name = "version-only feature resolves true on a supporting version",
@@ -732,6 +830,43 @@ function openssl_wrapper.selftest()
             end,
           }) == false
           and rng({ random = false }) == false
+      end,
+    },
+    {
+      -- Measured on a Control4 controller 2026-11-03: the 0.8.5 binding returns
+      -- the raw AES block from cipher:encrypt(block, key, nil, false).
+      name = "ECB probe passes on FIPS-197 known answers with padding off (Control4 0.8.5)",
+      test = function()
+        install(stub_openssl("0.8.5", { cipher = ecb_cipher() }))
+        return openssl_wrapper.get(OpenSSLFeature.ECB) ~= nil
+      end,
+    },
+    {
+      name = "ECB probe fails when a padding block comes back",
+      test = function()
+        install(stub_openssl("0.9.2", { cipher = ecb_cipher("pad") }))
+        return openssl_wrapper.get(OpenSSLFeature.ECB) == nil
+      end,
+    },
+    {
+      name = "ECB probe fails on a wrong block",
+      test = function()
+        install(stub_openssl("0.9.2", { cipher = ecb_cipher("wrong") }))
+        return openssl_wrapper.get(OpenSSLFeature.ECB) == nil
+      end,
+    },
+    {
+      name = "ECB probe fails when one key size is missing",
+      test = function()
+        install(stub_openssl("0.9.2", { cipher = ecb_cipher("missing_256") }))
+        return openssl_wrapper.get(OpenSSLFeature.ECB) == nil
+      end,
+    },
+    {
+      name = "ECB probe fails without cipher.get",
+      test = function()
+        install(stub_openssl("0.9.2", { cipher = {} }))
+        return openssl_wrapper.get(OpenSSLFeature.ECB) == nil
       end,
     },
     {

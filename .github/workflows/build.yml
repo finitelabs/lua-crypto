@@ -98,7 +98,8 @@ jobs:
   #   0.9.2  is the exact floor at which AAD starts working.
   #   0.11.1 is current upstream.
   # Ed25519 is unsupported on all three, which is why crypto.ed25519 never routes
-  # to OpenSSL.
+  # to OpenSSL. ECB (raw AES blocks for AES-CCM) was measured on a controller's
+  # 0.8.5 on 2026-11-03; 0.9.2 and 0.11.1 are expected to match.
   openssl-matrix:
     needs: check
     runs-on: ubuntu-26.04
@@ -148,6 +149,7 @@ jobs:
             local expected = {
               AAD = os.getenv("EXPECT_AAD") == "true",
               BN = true,
+              ECB = true,
               KDF = true,
               -- No lua-openssl build we ship against can sign with an Ed25519
               -- key, so this must stay false; if it ever flips, the routing
@@ -156,7 +158,7 @@ jobs:
             }
             local ok = true
             print("binding reports version: " .. tostring((openssl.version())))
-            for _, name in ipairs({ "AAD", "BN", "KDF", "OKP" }) do
+            for _, name in ipairs({ "AAD", "BN", "ECB", "KDF", "OKP" }) do
               local got, want = features[name] == true, expected[name]
               print(string.format("  %-4s got=%s want=%s", name, tostring(got), tostring(want)))
               if got ~= want then

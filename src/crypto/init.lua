@@ -1,7 +1,7 @@
 --- @module "crypto"
 --- Portable cryptographic primitives for Lua with optional OpenSSL acceleration.
 --- Pure-Lua implementations of hashing (SHA-256/512, BLAKE2), AEAD ciphers
---- (ChaCha20-Poly1305, AES-GCM), the Poly1305 MAC, HKDF key derivation,
+--- (ChaCha20-Poly1305, AES-GCM, AES-CCM), the Poly1305 MAC, HKDF key derivation,
 --- Curve25519/448 Diffie-Hellman, Ed25519 signatures, and SRP-6a. Runs on Lua
 --- 5.1, 5.2, 5.3, 5.4, and LuaJIT with zero C dependencies.
 ---
@@ -43,6 +43,8 @@ local crypto = {
   chacha20_poly1305 = require("crypto.chacha20_poly1305"),
   --- @type crypto.aes_gcm
   aes_gcm = require("crypto.aes_gcm"),
+  --- @type crypto.aes_ccm
+  aes_ccm = require("crypto.aes_ccm"),
 
   -- Stream ciphers
   --- @type crypto.chacha20
@@ -114,6 +116,7 @@ function crypto.selftest()
     "chacha20_poly1305",
     "poly1305",
     "aes_gcm",
+    "aes_ccm",
     "hkdf",
     "random",
     "bignum",

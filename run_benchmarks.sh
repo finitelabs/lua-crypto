@@ -10,7 +10,7 @@
 #   ./run_benchmarks.sh chacha20 x25519 # Run a subset
 #
 # Available modules: sha256, sha512, blake2, chacha20, chacha20_poly1305,
-#                    poly1305, aes_gcm, x25519, x448
+#                    poly1305, aes_gcm, aes_ccm, x25519, x448
 
 set -e  # Exit on any error
 
@@ -42,7 +42,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
 
 # Determine which modules to run
-all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "x25519" "x448")
+all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "x25519" "x448")
 modules_to_run=("$@")
 
 if [ ${#modules_to_run[@]} -eq 0 ] || [ "${modules_to_run[0]}" = "all" ]; then

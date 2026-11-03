@@ -4,9 +4,10 @@ A pure Lua implementation of common cryptographic primitives with **zero externa
 dependencies** and **optional OpenSSL acceleration**. Runs on Lua 5.1, 5.2, 5.3,
 5.4, 5.5, and LuaJIT.
 
-Hashing (SHA-256/512, BLAKE2), AEAD ciphers (ChaCha20-Poly1305, AES-GCM), the
-Poly1305 MAC, the ChaCha20 stream cipher, and Curve25519/448 Diffie-Hellman —
-portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
+Hashing (SHA-256/512, BLAKE2), AEAD ciphers (ChaCha20-Poly1305, AES-GCM,
+AES-CCM), the Poly1305 MAC, the ChaCha20 stream cipher, and Curve25519/448
+Diffie-Hellman — portable enough to run inside sandboxed Lua hosts such as
+Control4 DriverWorks.
 
 ## Features
 
@@ -25,6 +26,7 @@ portable enough to run inside sandboxed Lua hosts such as Control4 DriverWorks.
 | Hash | BLAKE2s, BLAKE2b (+ HMAC) | `crypto.blake2` |
 | AEAD | ChaCha20-Poly1305 | `crypto.chacha20_poly1305` |
 | AEAD | AES-GCM | `crypto.aes_gcm` |
+| AEAD | AES-CCM (RFC 3610, NIST SP 800-38C) | `crypto.aes_ccm` |
 | Stream cipher | ChaCha20 | `crypto.chacha20` |
 | MAC | Poly1305 | `crypto.poly1305` |
 | Diffie-Hellman | X25519 | `crypto.x25519` |
@@ -91,7 +93,7 @@ actually supports:
 ```lua
 crypto.use_openssl(true)
 local features = crypto.openssl_wrapper.features()
--- { AAD = false, BN = true, KDF = true, OKP = false, RANDOM = true }  -- e.g. Control4
+-- { AAD = false, BN = true, ECB = true, KDF = true, OKP = false, RANDOM = true }  -- e.g. Control4
 ```
 
 For SRP the difference is not a matter of taste, so `crypto.srp` exposes its own
@@ -106,17 +108,23 @@ end
 
 Measured behaviour of the bindings covered by CI:
 
-| Binding | AAD | BN | KDF | OKP | Notes |
-| --- | --- | --- | --- | --- | --- |
-| 0.8.5 (Control4 DriverWorks) | no | yes | yes | no | `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so AEAD stays pure Lua here |
-| 0.9.2 | yes | yes | yes | no | first version where AAD works |
-| 0.11.1 (current upstream) | yes | yes | yes | no | |
+| Binding | AAD | BN | ECB | KDF | OKP | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.8.5 (Control4 DriverWorks) | no | yes | yes | yes | no | `cipher:update(aad, true)` ignores the flag and encrypts the AAD as plaintext, so AEAD stays pure Lua here |
+| 0.9.2 | yes | yes | yes | yes | no | first version where AAD works |
+| 0.11.1 (current upstream) | yes | yes | yes | yes | no | |
 
 `RANDOM` is true on all three. It is resolved outside the `use_openssl` flag,
 since entropy is a capability rather than an optimisation.
 
 Note that `bn`'s modular exponentiation is named `powmod`, not `mod_exp`, on
 every build tested.
+
+AES-CCM is built in Lua over single AES blocks rather than on the binding's
+`aes-128-ccm`, which cannot set the message length on 0.8.5 and returns no tag
+without associated data. With `ECB` available those blocks go through
+`cipher:encrypt(blocks, key, nil, false)`, and the counter-mode keystream is a
+single call.
 
 With `BN` available, `crypto.bignum` routes `mod_exp` through `bn` at any size,
 and `mul`, `divmod`, `mod` and `mod_mul` once the work outweighs converting the
@@ -166,6 +174,10 @@ local tag = crypto.sha256.hmac_sha256_hex(key, message)
 -- AEAD: encrypt returns ciphertext..tag; decrypt returns plaintext or nil
 local sealed = crypto.chacha20_poly1305.encrypt(key, nonce, plaintext, aad)
 local opened = crypto.chacha20_poly1305.decrypt(key, nonce, sealed, aad)
+
+-- AES-CCM takes a 7-13 byte nonce and an even tag length from 4 to 16 (default 16)
+local ccm_sealed = crypto.aes_ccm.encrypt(key, nonce12, plaintext, aad, 16)
+local ccm_opened = crypto.aes_ccm.decrypt(key, nonce12, ccm_sealed, aad, 16)
 
 -- Diffie-Hellman (X25519); generate_keypair() returns private, public
 local alice_priv, alice_pub = crypto.x25519.generate_keypair()

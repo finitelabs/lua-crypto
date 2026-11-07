@@ -225,7 +225,7 @@ jobs:
                 ok = false
               end
             end
-            -- bignum's tests pass on a binding it declines, so only this loop
+            -- The bignum tests pass on a binding bignum declines, so only this loop
             -- catches a real build failing a per-operation known-answer check.
             -- The same holds for p256, whose OpenSSL field must reproduce 2G and
             -- 3G (addmod, submod, mulmod, sqrmod, invmod, powmod on bn handles).

@@ -48,8 +48,62 @@ jobs:
       - name: Check
         run: make check
 
-  test:
+  build:
     needs: check
+    runs-on: ubuntu-26.04
+    name: Build Combined Module
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Lua
+        uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: '5.4'
+
+      - name: Setup LuaRocks
+        uses: leafo/gh-actions-luarocks@v6
+        with:
+          luarocksVersion: "3.13.0"
+
+      - name: Install amalg
+        run: luarocks install amalg
+
+      - name: Build combined module
+        run: make build
+
+      - name: Verify build
+        run: |
+          # Check default build
+          if [ -f "build/crypto.lua" ]; then
+            echo "✅ build/crypto.lua exists ($(wc -c < "build/crypto.lua") bytes)"
+            # Quick sanity check - make sure it contains expected content
+            if grep -q "crypto" build/crypto.lua; then
+              echo "✅ Build contains expected content"
+            else
+              echo "❌ Build seems corrupted"
+              exit 1
+            fi
+          else
+            echo "❌ build/crypto.lua missing"
+            exit 1
+          fi
+          # Check portable build (all dependencies bundled)
+          if [ -f "build/crypto-portable.lua" ]; then
+            echo "✅ build/crypto-portable.lua exists ($(wc -c < "build/crypto-portable.lua") bytes)"
+          else
+            echo "❌ build/crypto-portable.lua missing"
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: crypto
+          path: build/crypto*.lua
+          retention-days: 30
+
+  test:
+    needs: build
     runs-on: ubuntu-26.04
     continue-on-error: false
     strategy:
@@ -78,9 +132,15 @@ jobs:
           echo "LUA_BINARY=$LUA_BINARY" >> "$GITHUB_ENV"
           ${LUA_BINARY} -v
 
+      - name: Download the built files
+        uses: actions/download-artifact@v8
+        with:
+          name: crypto
+          path: build
+
       - name: Run tests
         run: |
-          make test-all
+          make test-all test-bundle
 
   # The Lua matrix above proves portability across interpreters, but every leg of
   # it runs with no lua-openssl installed, so it only ever exercises the pure-Lua
@@ -101,7 +161,7 @@ jobs:
   # to OpenSSL. ECB (raw AES blocks for AES-CCM) was measured on a controller's
   # 0.8.5 on 2026-11-03; 0.9.2 and 0.11.1 are expected to match.
   openssl-matrix:
-    needs: check
+    needs: build
     runs-on: ubuntu-26.04
     strategy:
       # Report every binding's result; one failing version must not mask another.
@@ -165,7 +225,7 @@ jobs:
                 ok = false
               end
             end
-            -- bignum.selftest passes on a binding it declines, so only this loop
+            -- bignum's tests pass on a binding it declines, so only this loop
             -- catches a real build failing a per-operation known-answer check.
             -- The same holds for p256, whose OpenSSL field must reproduce 2G and
             -- 3G (addmod, submod, mulmod, sqrmod, invmod, powmod on bn handles).
@@ -186,64 +246,17 @@ jobs:
             end
           '
 
+      - name: Download the built files
+        uses: actions/download-artifact@v8
+        with:
+          name: crypto
+          path: build
+
       - name: Run tests with OpenSSL acceleration enabled
         env:
           CRYPTO_USE_OPENSSL: '1'
-        run: make test-all
+        run: make test-all test-bundle
 
       - name: Run tests with OpenSSL acceleration disabled
-        run: make test-all
+        run: make test-all test-bundle
 
-  build:
-    needs: [test, openssl-matrix]
-    runs-on: ubuntu-26.04
-    name: Build Combined Module
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Lua
-        uses: leafo/gh-actions-lua@v13
-        with:
-          luaVersion: '5.4'
-
-      - name: Setup LuaRocks
-        uses: leafo/gh-actions-luarocks@v6
-        with:
-          luarocksVersion: "3.13.0"
-
-      - name: Install amalg
-        run: luarocks install amalg
-
-      - name: Build combined module
-        run: make build
-
-      - name: Verify build
-        run: |
-          # Check default build
-          if [ -f "build/crypto.lua" ]; then
-            echo "✅ build/crypto.lua exists ($(wc -c < "build/crypto.lua") bytes)"
-            # Quick sanity check - make sure it contains expected content
-            if grep -q "crypto" build/crypto.lua; then
-              echo "✅ Build contains expected content"
-            else
-              echo "❌ Build seems corrupted"
-              exit 1
-            fi
-          else
-            echo "❌ build/crypto.lua missing"
-            exit 1
-          fi
-          # Check portable build (all dependencies bundled)
-          if [ -f "build/crypto-portable.lua" ]; then
-            echo "✅ build/crypto-portable.lua exists ($(wc -c < "build/crypto-portable.lua") bytes)"
-          else
-            echo "❌ build/crypto-portable.lua missing"
-            exit 1
-          fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: crypto.lua
-          path: build/crypto.lua
-          retention-days: 30

@@ -5,7 +5,7 @@
 ```
 lua-crypto/
 ├── src/crypto/
-│   ├── init.lua              # Module aggregator; exports primitives, use_openssl(), version(), selftest()
+│   ├── init.lua              # Module aggregator; exports primitives, use_openssl(), version()
 │   ├── sha256.lua            # SHA-256 + HMAC-SHA256
 │   ├── sha512.lua            # SHA-512 + HMAC-SHA512
 │   ├── blake2.lua            # BLAKE2s / BLAKE2b + HMAC
@@ -28,9 +28,15 @@ lua-crypto/
 │   ├── openssl_wrapper.lua   # Optional lua-openssl acceleration + graceful fallback
 │   ├── annotations.lua       # Shared LuaCATS aliases (workspace-wide; not require'd)
 │   └── utils/
-│       ├── init.lua          # Utils aggregator (bytes, benchmark)
-│       ├── bytes.lua         # Byte/hex helpers
-│       └── benchmark.lua     # Benchmarking utilities
+│       ├── init.lua          # Utils aggregator (bytes)
+│       └── bytes.lua         # Byte/hex helpers
+├── test/
+│   ├── test_<module>.lua     # Each module's known-answer tests; returns the test function
+│   ├── lpack_stub.lua        # Control4's lpack-shaped string.pack, for the lpack run
+│   └── with_tests.lua        # Main chunk of the with-tests build; selftest() and benchmark()
+├── bench/
+│   ├── bench_<module>.lua    # Each module's benchmarks; returns the benchmark function
+│   └── benchmark.lua         # Benchmarking helper
 ├── vendor/
 │   └── bitn.lua              # Vendored lua-bitn (bundled into the single-file build)
 ├── tools/
@@ -50,16 +56,17 @@ lua-crypto/
 ## Key Commands
 
 ```bash
-make test              # Run all module self-tests
-make test-sha512       # Run a specific module's self-test
+make test              # Run every module's tests
+make test-sha512       # Run a specific module's tests
 make test-matrix       # Run across Lua versions
+make test-bundle       # Run the tests against the built files (after make build)
 make bench             # Run benchmarks
 make format            # Format code with stylua
 make format-check      # Verify formatting without rewriting
 make lint              # Lint with luacheck
 make typecheck         # Check LuaCATS annotations with lua-language-server
 make check             # Full gate: format-check + lint + typecheck
-make build             # Build single-file distribution (build/crypto.lua)
+make build             # Build crypto.lua, crypto-portable.lua and crypto-tests.lua
 ```
 
 `make check` is the gate CI runs. `make all` is `format lint test build`, which
@@ -132,11 +139,13 @@ Part of `check`, so CI enforces it.
 
 - `crypto.use_openssl(bool)` — opt in to OpenSSL acceleration (see below)
 - `crypto.version()` — build-injected version string
-- `crypto.selftest()` — runs every module's known-answer self-test
 
-Each primitive module also exposes its own `selftest()`. Most, but not all, also
-expose `benchmark()` — `random` and `openssl_wrapper` have none. `crypto.selftest()`
-guards with `type(mod.selftest) == "function"` rather than assuming the shape.
+Nothing under `src/` is test code: tests live in `test/`, benchmarks in `bench/`,
+and `make build` fails if `build/crypto.lua` mentions `selftest` or `benchmark`.
+A test that needs a private function or value reads it from that module's
+`_internal` table (bignum, chacha20, chacha20_poly1305, ed25519,
+openssl_wrapper, p256, spake2plus, srp); keep those tables to what the tests
+use.
 
 ### OpenSSL acceleration and fallback
 
@@ -177,7 +186,7 @@ Routing is deliberate and hardwired, not runtime-probed:
   transitively. `Feature.KDF` is declared but unused; see the rationale comment
   in `hkdf.lua`.
 - **pbkdf2** → no route of its own either, for the same reason: one HMAC per
-  iteration per block, each already OpenSSL-preferred. Its selftest runs RFC
+  iteration per block, each already OpenSSL-preferred. Its tests run RFC
   7914's 80000-iteration vector only where it projects to finish within 10 s
   (LuaJIT, or HMAC through OpenSSL) and prints a SKIP elsewhere.
 - **bignum** → per operation, behind `Feature.BN` and that operation's own
@@ -212,7 +221,7 @@ carry a probe that exercises the real call and checks the answer.
 Known Control4 DriverWorks facts (measured 2026-08-07, lua-openssl 0.8.5 over
 OpenSSL 3.1.4). These are regression-tested by the `openssl-matrix` CI job, which
 installs the real `0.8.5-1`, `0.9.2-2` and `0.11.1-1` rocks and asserts the feature
-map against each. `openssl_wrapper.selftest()` also covers this ground, but it
+map against each. `test/test_openssl_wrapper.lua` also covers this ground, but it
 drives *injected stand-in bindings* rather than a real one, so it pins the gate's
 verdict for a version string rather than the binding's behaviour:
 
@@ -359,21 +368,29 @@ support. It is vendored under `vendor/` and bundled into the single-file build.
 
 ## Testing
 
-Every module ships a `selftest()` that runs known-answer tests (RFC/spec
-vectors). The runner invokes `require("crypto.<module>").selftest()` per module:
+`test/test_<module>.lua` returns a function that runs that module's known-answer
+tests (RFC/spec vectors), prints each result and returns false on a failure. The
+runner calls each one:
 
 ```bash
 ./run_tests.sh              # all modules
 ./run_tests.sh sha512       # one module
 make test-matrix            # across Lua 5.1–5.4 + LuaJIT
+make build test-bundle      # the same tests against the built files
 ```
 
-`crypto.selftest()` fails any module whose selftest leaves the acceleration
-flag changed: a driver that enabled acceleration and then ran it would be left
-unaccelerated, which on Control4 makes SRP unusable. A selftest that toggles the
-flag restores what `openssl_wrapper.enabled()` returned, not the
-`CRYPTO_USE_OPENSSL` default. The runner's lpack pass flips the flag, so every
-run covers both settings.
+`TEST_BUNDLE=build/crypto.lua ./run_tests.sh` loads that file first and takes
+`src/` off the path, so a module missing from the bundle fails instead of
+loading from source. CI runs the suite on `src/` and on the build job's files,
+in every interpreter and every `openssl-matrix` leg.
+
+`test/with_tests.lua`'s `selftest()` runs every module's tests and fails any
+whose tests leave the acceleration flag changed: a driver that enabled
+acceleration and then ran them would be left unaccelerated, which on Control4
+makes SRP unusable. A test that toggles the flag restores what
+`openssl_wrapper.enabled()` returned, not the `CRYPTO_USE_OPENSSL` default. The
+runner's lpack pass runs it with the flag flipped, so every run covers both
+settings.
 
 ## Building
 
@@ -382,32 +399,38 @@ run covers both settings.
 ```bash
 make build          # Output: build/crypto.lua          (core; bitn excluded via `-i bitn`)
                     #         build/crypto-portable.lua  (all dependencies bundled)
+                    #         build/crypto-tests.lua     (portable plus test/ and bench/)
 ```
 
 `crypto.lua` is the **canonical core build**: it excludes `bitn` and expects it
 on the Lua path, so it composes with other libraries that share `bitn` without
 duplicating it (e.g. lua-noiseprotocol vendors this as `vendor/crypto.lua`
 alongside its own `vendor/bitn.lua`). `crypto-portable.lua` bundles every
-dependency for a single drop-in file with zero external requires. Version is
-injected from git tags during release.
+dependency for a single drop-in file with zero external requires.
+`crypto-tests.lua` is built from `test/with_tests.lua`: `dofile` returns the
+library with `selftest()` and `benchmark()` added, for running them on a
+controller against its own lua-openssl. Version is injected from git tags into
+all three.
 
 ## CI/CD
 
 - **build.yml**: on push/PR to `main` or `master`.
   - `check` — `make check` (format-check, luacheck, typecheck against
     lua-language-server 3.19.2).
-  - `test` — `make test-all` across Lua 5.1–5.5 and LuaJIT 2.0/2.1.
+  - `build` — the three single files, uploaded as the `crypto` artifact.
+  - `test` — `make test-all test-bundle` across Lua 5.1–5.5 and LuaJIT 2.0/2.1,
+    on the build job's files.
   - `openssl-matrix` — installs the real `lua-openssl` rocks `0.8.5-1`, `0.9.2-2`
     and `0.11.1-1` and runs the suite against each with acceleration both on and
     off. This is the only place the DriverWorks feature table above is checked
     against a real binding rather than a stand-in, so a change to
     `openssl_wrapper` that passes `check` and `test` can still fail here. It also
     asserts `bignum.is_accelerated(op)` for every routed bignum operation and
-    `p256.is_accelerated()`, since both selftests accept a binding they decline.
-  - `build` — single-file distributions.
-- **release.yml**: on version tags (`v*`) — publishes **both** `build/crypto.lua`
-  and `build/crypto-portable.lua`. (build.yml's artifact upload keeps only
-  `crypto.lua`; the release carries both.)
+    `p256.is_accelerated()`, since both modules' tests accept a binding they
+    decline.
+- **release.yml**: on version tags (`v*`) — runs `make test-bundle`, then
+  publishes `build/crypto.lua`, `build/crypto-portable.lua` and
+  `build/crypto-tests.lua`.
 
 ## Code Style
 

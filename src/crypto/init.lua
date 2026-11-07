@@ -116,46 +116,4 @@ function crypto.version()
   return VERSION
 end
 
---- Run every module's known-answer self-test.
---- @return boolean ok True if all module self-tests pass
-function crypto.selftest()
-  local modules = {
-    "sha256",
-    "sha512",
-    "blake2",
-    "chacha20",
-    "chacha20_poly1305",
-    "poly1305",
-    "aes_gcm",
-    "aes_ccm",
-    "hkdf",
-    "pbkdf2",
-    "random",
-    "bignum",
-    "srp",
-    "p256",
-    "spake2plus",
-    "x25519",
-    "x448",
-    "ed25519",
-    "openssl_wrapper",
-  }
-  local ok = true
-  for _, name in ipairs(modules) do
-    local mod = crypto[name]
-    if type(mod.selftest) == "function" then
-      local accelerated = openssl_wrapper.enabled()
-      if mod.selftest() == false then
-        ok = false
-      end
-      -- A host that enabled acceleration and then ran this must still have it.
-      if openssl_wrapper.enabled() ~= accelerated then
-        print("crypto." .. name .. ".selftest() did not restore the OpenSSL acceleration flag")
-        ok = false
-      end
-    end
-  end
-  return ok
-end
-
 return crypto

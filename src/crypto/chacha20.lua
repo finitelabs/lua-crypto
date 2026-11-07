@@ -211,7 +211,7 @@ function chacha20.decrypt(key, nonce, ciphertext, counter)
   return chacha20.crypt(key, nonce, ciphertext, counter)
 end
 
--- Private functions and values the tests in test/ check directly.
+-- Private functions the tests in test/ check directly.
 chacha20._internal = {
   chacha20_block = chacha20_block,
 }

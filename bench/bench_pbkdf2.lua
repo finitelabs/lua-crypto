@@ -1,5 +1,3 @@
---- Benchmarks for crypto.pbkdf2: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local pbkdf2 = require("crypto.pbkdf2")
 
 local openssl_wrapper = require("crypto.openssl_wrapper")

@@ -169,7 +169,7 @@ function chacha20_poly1305.decrypt(key, nonce, ciphertext_and_tag, aad)
   return plaintext
 end
 
--- Private functions and values the tests in test/ check directly.
+-- Private functions the tests in test/ check directly.
 chacha20_poly1305._internal = {
   poly1305_key_gen = poly1305_key_gen,
 }

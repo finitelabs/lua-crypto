@@ -1,5 +1,3 @@
---- Tests for crypto.random: `make test` runs them, and so does the with-tests build's selftest().
-
 local random = require("crypto.random")
 local openssl_wrapper = require("crypto.openssl_wrapper")
 

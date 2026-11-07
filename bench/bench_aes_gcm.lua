@@ -1,5 +1,3 @@
---- Benchmarks for crypto.aes_gcm: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local aes_gcm = require("crypto.aes_gcm")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

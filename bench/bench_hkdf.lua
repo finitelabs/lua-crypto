@@ -1,5 +1,3 @@
---- Benchmarks for crypto.hkdf: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local hkdf = require("crypto.hkdf")
 local string_char = string.char
 local string_rep = string.rep

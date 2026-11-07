@@ -1,5 +1,3 @@
---- Tests for crypto.blake2: `make test` runs them, and so does the with-tests build's selftest().
-
 local blake2 = require("crypto.blake2")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

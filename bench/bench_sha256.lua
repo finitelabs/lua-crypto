@@ -1,5 +1,3 @@
---- Benchmarks for crypto.sha256: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local sha256 = require("crypto.sha256")
 local string_rep = string.rep
 

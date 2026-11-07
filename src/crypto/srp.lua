@@ -410,7 +410,7 @@ function srp.is_accelerated()
   return bignum.is_accelerated()
 end
 
--- Private functions and values the tests in test/ check directly.
+-- Private functions the tests in test/ check directly.
 srp._internal = {
   resolve_group = resolve_group,
 }

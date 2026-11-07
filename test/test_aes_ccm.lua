@@ -1,5 +1,3 @@
---- Tests for crypto.aes_ccm: `make test` runs them, and so does the with-tests build's selftest().
-
 local aes_ccm = require("crypto.aes_ccm")
 local aes_core = require("crypto.aes_core")
 local utils = require("crypto.utils")

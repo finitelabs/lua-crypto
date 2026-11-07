@@ -1,5 +1,3 @@
---- Benchmarks for crypto.srp: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local srp = require("crypto.srp")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

@@ -375,7 +375,7 @@ function spake2plus.is_accelerated()
   return p256.is_accelerated()
 end
 
--- Private functions and values the tests in test/ check directly.
+-- Private functions the tests in test/ check directly.
 spake2plus._internal = {
   constants = constants,
   prover_compute = prover_compute,

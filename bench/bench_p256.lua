@@ -1,5 +1,3 @@
---- Benchmarks for crypto.p256: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local p256 = require("crypto.p256")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

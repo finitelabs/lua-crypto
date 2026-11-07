@@ -1,5 +1,3 @@
---- Tests for crypto.poly1305: `make test` runs them, and so does the with-tests build's selftest().
-
 local poly1305 = require("crypto.poly1305")
 local string_byte = string.byte
 local string_char = string.char

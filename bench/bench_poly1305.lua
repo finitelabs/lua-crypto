@@ -1,5 +1,3 @@
---- Benchmarks for crypto.poly1305: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local poly1305 = require("crypto.poly1305")
 
 local utils = require("crypto.utils")

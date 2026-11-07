@@ -1,5 +1,3 @@
---- Benchmarks for crypto.ed25519: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local ed25519 = require("crypto.ed25519")
 
 local utils = require("crypto.utils")

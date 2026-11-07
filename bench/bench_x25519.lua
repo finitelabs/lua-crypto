@@ -1,5 +1,3 @@
---- Benchmarks for crypto.x25519: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local x25519 = require("crypto.x25519")
 
 local utils = require("crypto.utils")

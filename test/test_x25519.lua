@@ -1,5 +1,3 @@
---- Tests for crypto.x25519: `make test` runs them, and so does the with-tests build's selftest().
-
 local x25519 = require("crypto.x25519")
 local string_byte = string.byte
 

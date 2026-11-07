@@ -899,7 +899,7 @@ function ed25519.verify(public_key, message, signature)
   return diff == 0
 end
 
--- Private functions and values the tests in test/ check directly.
+-- Private functions the tests in test/ check directly.
 ed25519._internal = {
   string_to_bytes = string_to_bytes,
   bytes_to_string = bytes_to_string,

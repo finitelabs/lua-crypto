@@ -1,5 +1,3 @@
---- Tests for crypto.chacha20: `make test` runs them, and so does the with-tests build's selftest().
-
 local chacha20 = require("crypto.chacha20")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

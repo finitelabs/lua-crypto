@@ -1,5 +1,3 @@
---- Tests for crypto.aes_gcm: `make test` runs them, and so does the with-tests build's selftest().
-
 local aes_gcm = require("crypto.aes_gcm")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

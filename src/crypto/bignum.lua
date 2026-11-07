@@ -1229,7 +1229,7 @@ function bignum.is_accelerated(op)
   return true
 end
 
--- Private functions and values the tests in test/ check directly.
+-- Private functions the tests in test/ check directly.
 bignum._internal = {
   add_raw = add_raw,
   mul_raw = mul_raw,

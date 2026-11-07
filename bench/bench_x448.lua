@@ -1,5 +1,3 @@
---- Benchmarks for crypto.x448: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local x448 = require("crypto.x448")
 
 local utils = require("crypto.utils")

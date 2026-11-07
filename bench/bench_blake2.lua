@@ -1,5 +1,3 @@
---- Benchmarks for crypto.blake2: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local blake2 = require("crypto.blake2")
 local string_rep = string.rep
 

@@ -1,5 +1,3 @@
---- Tests for crypto.ed25519: `make test` runs them, and so does the with-tests build's selftest().
-
 local ed25519 = require("crypto.ed25519")
 local bit32 = require("bitn").bit32
 local bit32_raw_bxor = bit32.raw_bxor

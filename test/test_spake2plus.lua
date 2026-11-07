@@ -1,5 +1,3 @@
---- Tests for crypto.spake2plus: `make test` runs them, and so does the with-tests build's selftest().
-
 local spake2plus = require("crypto.spake2plus")
 local p256 = require("crypto.p256")
 local utils = require("crypto.utils")

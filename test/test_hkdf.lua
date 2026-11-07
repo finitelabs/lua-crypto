@@ -1,5 +1,3 @@
---- Tests for crypto.hkdf: `make test` runs them, and so does the with-tests build's selftest().
-
 local hkdf = require("crypto.hkdf")
 local string_char = string.char
 local string_rep = string.rep

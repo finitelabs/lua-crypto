@@ -1,5 +1,3 @@
---- Tests for crypto.sha512: `make test` runs them, and so does the with-tests build's selftest().
-
 local sha512 = require("crypto.sha512")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

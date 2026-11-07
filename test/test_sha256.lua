@@ -1,5 +1,3 @@
---- Tests for crypto.sha256: `make test` runs them, and so does the with-tests build's selftest().
-
 local sha256 = require("crypto.sha256")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

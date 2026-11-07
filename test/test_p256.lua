@@ -1,5 +1,3 @@
---- Tests for crypto.p256: `make test` runs them, and so does the with-tests build's selftest().
-
 local p256 = require("crypto.p256")
 local bignum = require("crypto.bignum")
 local openssl_wrapper = require("crypto.openssl_wrapper")

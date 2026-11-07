@@ -1,5 +1,3 @@
---- Tests for crypto.openssl_wrapper: `make test` runs them, and so does the with-tests build's selftest().
-
 local openssl_wrapper = require("crypto.openssl_wrapper")
 local OpenSSLFeature = {
   --- Additional Authenticated Data support for AEAD ciphers (ChaCha20-Poly1305, AES-GCM)

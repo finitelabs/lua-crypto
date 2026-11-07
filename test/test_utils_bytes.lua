@@ -1,5 +1,3 @@
---- Tests for crypto.utils.bytes: `make test` runs them, and so does the with-tests build's selftest().
-
 local bytes = require("crypto.utils.bytes")
 local bitn = require("bitn")
 local bit64 = bitn.bit64

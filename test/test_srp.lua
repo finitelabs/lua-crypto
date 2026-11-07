@@ -1,5 +1,3 @@
---- Tests for crypto.srp: `make test` runs them, and so does the with-tests build's selftest().
-
 local srp = require("crypto.srp")
 local bignum = require("crypto.bignum")
 local utils = require("crypto.utils")

@@ -1,5 +1,3 @@
---- Benchmarks for crypto.sha512: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local sha512 = require("crypto.sha512")
 local string_rep = string.rep
 

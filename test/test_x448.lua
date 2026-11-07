@@ -1,5 +1,3 @@
---- Tests for crypto.x448: `make test` runs them, and so does the with-tests build's selftest().
-
 local x448 = require("crypto.x448")
 local char = string.char
 local string_rep = string.rep

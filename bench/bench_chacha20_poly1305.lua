@@ -1,5 +1,3 @@
---- Benchmarks for crypto.chacha20_poly1305: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local chacha20_poly1305 = require("crypto.chacha20_poly1305")
 local utils = require("crypto.utils")
 local bytes = utils.bytes

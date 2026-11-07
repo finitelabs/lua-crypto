@@ -1,5 +1,3 @@
---- Benchmarks for crypto.bignum: `make bench` runs them, and so does the with-tests build's benchmark().
-
 local bignum = require("crypto.bignum")
 
 local benchmark_op = require("benchmark").benchmark_op

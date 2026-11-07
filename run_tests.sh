@@ -9,10 +9,13 @@
 #   ./run_tests.sh sha512             # Run only sha512
 #   ./run_tests.sh sha256 x25519      # Run only sha256 and x25519
 #
+# TEST_BUNDLE=build/crypto.lua runs the same tests against that built file, with src/
+# off the path so nothing can load from it.
+#
 # Available modules: sha256, sha512, blake2, chacha20, chacha20_poly1305,
 #                    poly1305, aes_gcm, aes_ccm, hkdf, pbkdf2, random, bignum,
 #                    srp, p256, spake2plus, x25519, x448, ed25519,
-#                    openssl_wrapper
+#                    openssl_wrapper, utils_bytes
 
 set -e  # Exit on any error
 
@@ -47,10 +50,17 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Add repository root to Lua's package path
 # This allows require() to find modules in the src/vendor directories
-lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
+lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$script_dir/test/?.lua;$script_dir/bench/?.lua;$LUA_PATH"
+load_lib=""
+if [ -n "$TEST_BUNDLE" ]; then
+    [ -f "$TEST_BUNDLE" ] || { echo -e "${red}Error: $TEST_BUNDLE not found; run make build${nc}"; exit 1; }
+    echo "Testing the built bundle: $TEST_BUNDLE"
+    lua_path="$script_dir/test/?.lua;$script_dir/bench/?.lua;$script_dir/vendor/?.lua"
+    load_lib="package.preload['crypto'] = assert(loadfile('$TEST_BUNDLE')); require('crypto');"
+fi
 
 # Parse command line arguments to determine which modules to run
-all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "hkdf" "pbkdf2" "random" "bignum" "srp" "p256" "spake2plus" "x25519" "x448" "ed25519" "openssl_wrapper" "lpack")
+all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "hkdf" "pbkdf2" "random" "bignum" "srp" "p256" "spake2plus" "x25519" "x448" "ed25519" "openssl_wrapper" "utils_bytes" "lpack")
 default_modules=("${all_modules[@]}")
 modules_to_run=("$@")
 
@@ -122,9 +132,9 @@ run_test() {
 run_selftest() {
   local module_name="$1"
   local module_key="$2"
-  local lua_module="$3"
   run_test "$module_name" "$module_key" "
-    local result = require('$lua_module').selftest()
+    $load_lib
+    local result = dofile('$script_dir/test/test_$module_key.lua')()
     if result == false then
         os.exit(1)
     end
@@ -132,32 +142,34 @@ run_selftest() {
 }
 
 # Run module tests
-run_selftest "SHA-256"            "sha256"            "crypto.sha256"
-run_selftest "SHA-512"            "sha512"            "crypto.sha512"
-run_selftest "BLAKE2"             "blake2"            "crypto.blake2"
-run_selftest "ChaCha20"           "chacha20"          "crypto.chacha20"
-run_selftest "ChaCha20-Poly1305"  "chacha20_poly1305" "crypto.chacha20_poly1305"
-run_selftest "Poly1305"           "poly1305"          "crypto.poly1305"
-run_selftest "AES-GCM"            "aes_gcm"           "crypto.aes_gcm"
-run_selftest "AES-CCM"            "aes_ccm"           "crypto.aes_ccm"
-run_selftest "HKDF"               "hkdf"              "crypto.hkdf"
-run_selftest "PBKDF2"             "pbkdf2"            "crypto.pbkdf2"
-run_selftest "Randomness"         "random"            "crypto.random"
-run_selftest "Bignum"             "bignum"            "crypto.bignum"
-run_selftest "SRP-6a"             "srp"               "crypto.srp"
-run_selftest "P-256"              "p256"              "crypto.p256"
-run_selftest "SPAKE2+"            "spake2plus"        "crypto.spake2plus"
-run_selftest "X25519"             "x25519"            "crypto.x25519"
-run_selftest "X448"               "x448"              "crypto.x448"
-run_selftest "Ed25519"            "ed25519"           "crypto.ed25519"
-run_selftest "OpenSSL gating"     "openssl_wrapper"   "crypto.openssl_wrapper"
+run_selftest "SHA-256"            "sha256"
+run_selftest "SHA-512"            "sha512"
+run_selftest "BLAKE2"             "blake2"
+run_selftest "ChaCha20"           "chacha20"
+run_selftest "ChaCha20-Poly1305"  "chacha20_poly1305"
+run_selftest "Poly1305"           "poly1305"
+run_selftest "AES-GCM"            "aes_gcm"
+run_selftest "AES-CCM"            "aes_ccm"
+run_selftest "HKDF"               "hkdf"
+run_selftest "PBKDF2"             "pbkdf2"
+run_selftest "Randomness"         "random"
+run_selftest "Bignum"             "bignum"
+run_selftest "SRP-6a"             "srp"
+run_selftest "P-256"              "p256"
+run_selftest "SPAKE2+"            "spake2plus"
+run_selftest "X25519"             "x25519"
+run_selftest "X448"               "x448"
+run_selftest "Ed25519"            "ed25519"
+run_selftest "OpenSSL gating"     "openssl_wrapper"
+run_selftest "Byte utilities"     "utils_bytes"
 
 # Control4's LuaJIT has string.pack/unpack as lpack, a different dialect: every
-# selftest again with that shape installed before bitn loads, and with the
+# test again with that shape installed before bitn loads, and with the
 # acceleration flag flipped so every run covers both settings.
-run_test "All selftests with lpack-shaped string.pack" "lpack" "
+run_test "All tests with lpack-shaped string.pack" "lpack" "
     dofile('$script_dir/test/lpack_stub.lua')
-    local crypto = require('crypto')
+    $load_lib
+    local crypto = dofile('$script_dir/test/with_tests.lua')
     crypto.use_openssl(not crypto.openssl_wrapper.enabled())
     if not crypto.selftest() then
         os.exit(1)

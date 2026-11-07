@@ -1,6 +1,6 @@
---- @module "crypto.utils.benchmark"
+--- @module "benchmark"
 --- Common benchmarking utilities for performance testing
---- @class crypto.utils.benchmark
+--- @class benchmark
 local benchmark = {}
 
 --- Run a benchmarked operation with warmup and timing

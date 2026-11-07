@@ -16,7 +16,8 @@ Control4 DriverWorks.
 - **Optional OpenSSL acceleration**: Transparently prefers the host `lua-openssl`
   binding for hashing, AEAD and big-number arithmetic when available, and falls
   back to pure Lua automatically
-- **Well-tested**: Every module ships known-answer self-tests (RFC vectors)
+- **Well-tested**: Known-answer tests (RFC vectors) for every module, run against
+  the source and the built files
 
 ## Supported Algorithms
 
@@ -157,6 +158,10 @@ Download a pre-built single-file module from the
   dependency is vendored only once.
 - **`crypto-portable.lua`** — **portable** build with every dependency bundled
   in (zero external dependencies). Use this when you want a single drop-in file.
+- **`crypto-tests.lua`** — the portable build plus every test and benchmark, for
+  running them where the library runs. `dofile("crypto-tests.lua")` returns the
+  library with `selftest()` and `benchmark()` added. The other two files carry
+  no test code.
 
 ### Option 2: From Source
 
@@ -248,10 +253,11 @@ make install-deps
 ### Testing
 
 ```bash
-make test                # Run all module self-tests
-make test-sha512         # Run a specific module's self-test
+make test                # Run every module's tests
+make test-sha512         # Run a specific module's tests
 make test-matrix         # Run tests across all Lua versions
 make test-matrix-x25519  # Run a specific module across all Lua versions
+make build test-bundle   # Run the tests against the built files
 
 # Or use the script directly with a custom Lua binary
 LUA_BINARY=lua5.1 ./run_tests.sh
@@ -279,7 +285,7 @@ make typecheck           # Check annotations with lua-language-server
 ### Building
 
 ```bash
-make build               # Build single-file distribution (build/crypto.lua)
+make build               # Build crypto.lua, crypto-portable.lua and crypto-tests.lua
 make clean               # Remove generated files
 ```
 

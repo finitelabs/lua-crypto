@@ -40,10 +40,10 @@ echo
 
 # Get script directory and set up package path
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$LUA_PATH"
+lua_path="$script_dir/?.lua;$script_dir/?/init.lua;$script_dir/src/?.lua;$script_dir/src/?/init.lua;$script_dir/vendor/?.lua;$script_dir/bench/?.lua;$LUA_PATH"
 
 # Determine which modules to run
-all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "pbkdf2" "p256" "spake2plus" "x25519" "x448")
+all_modules=("sha256" "sha512" "blake2" "chacha20" "chacha20_poly1305" "poly1305" "aes_gcm" "aes_ccm" "hkdf" "pbkdf2" "bignum" "srp" "p256" "spake2plus" "x25519" "x448" "ed25519")
 modules_to_run=("$@")
 
 if [ ${#modules_to_run[@]} -eq 0 ] || [ "${modules_to_run[0]}" = "all" ]; then
@@ -71,7 +71,7 @@ for module in "${modules_to_run[@]}"; do
     echo "---------------------------------------------"
     echo -e "${blue}Benchmarking $module...${nc}"
     echo "---------------------------------------------"
-    if ! LUA_PATH="$lua_path" "$lua_binary" -e "require('crypto.$module').benchmark()" 2>&1; then
+    if ! LUA_PATH="$lua_path" "$lua_binary" -e "dofile('$script_dir/bench/bench_$module.lua')()" 2>&1; then
         echo -e "${red}$module: BENCHMARK FAILED${nc}"
         failed=1
     fi

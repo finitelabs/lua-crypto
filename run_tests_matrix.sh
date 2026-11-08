@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # List of luaenv versions to test
-LUA_VERSIONS=("5.1.5" "5.2.4" "5.3.6" "5.4.8" "luajit-2.1-dev")
+# LuaJIT 2.0 is CI-only: it has no arm64 port.
+LUA_VERSIONS=("5.1.5" "5.2.4" "5.3.6" "5.4.9" "5.5.1" "luajit-2.1-dev")
 
 # Colors for output
 green='\033[0;32m'

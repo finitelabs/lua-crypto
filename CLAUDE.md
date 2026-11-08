@@ -375,7 +375,7 @@ runner calls each one:
 ```bash
 ./run_tests.sh              # all modules
 ./run_tests.sh sha512       # one module
-make test-matrix            # across Lua 5.1–5.5 + LuaJIT 2.0/2.1, as CI
+make test-matrix            # across Lua 5.1–5.5 + LuaJIT 2.1 (CI adds LuaJIT 2.0, no arm64 port)
 make build test-bundle      # the same tests against the built files
 ```
 

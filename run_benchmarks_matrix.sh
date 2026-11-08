@@ -11,8 +11,7 @@
 #   ./run_benchmarks_matrix.sh bit32 bit64       # Run specific benchmarks on all versions
 
 # List of luaenv versions to benchmark
-# The versions CI tests (gh-actions-lua's 5.1-5.5 aliases and LuaJIT's v2.1 branch). CI also runs
-# LuaJIT 2.0, which has no arm64 port, so it stays CI-only.
+# Same list as run_tests_matrix.sh.
 LUA_VERSIONS=("5.1.5" "5.2.4" "5.3.6" "5.4.9" "5.5.1" "luajit-2.1-dev")
 
 # Colors for output
